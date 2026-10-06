@@ -1,0 +1,70 @@
+name: dockyard
+
+services:
+  # Public entry point: an outbound tunnel to Cloudflare. No router ports needed.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    networks: [edge]
+    restart: unless-stopped
+    depends_on: [traefik]
+
+  # Routes every *.yourdomain request to the right container by hostname.
+  traefik:
+    image: traefik:v3
+    command:
+      - --providers.docker=true
+      - --providers.docker.endpoint=tcp://socket-proxy:2375
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=dockyard_edge
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.forwardedheaders.insecure=true
+      - --accesslog=true
+      - --log.level=INFO
+    networks: [edge, socket]
+    restart: unless-stopped
+    depends_on: [socket-proxy]
+
+  # Gives Traefik read-only access to container metadata instead of the raw socket.
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      CONTAINERS: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [socket]
+    restart: unless-stopped
+
+  # The control plane: API, dashboard and deploy hooks.
+  dockyard:
+    build: .
+    image: dockyard:local
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      EDGE_NETWORK: dockyard_edge
+    volumes:
+      # Full Docker access is required to run deployments. Treat the dashboard password like root.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - dockyard-data:/data
+    ports:
+      # Local-only access for first setup and when the tunnel is down.
+      - "127.0.0.1:3000:3000"
+    networks: [edge]
+    restart: unless-stopped
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.dockyard.rule: Host(`${DASHBOARD_HOST:?Set DASHBOARD_HOST in .env}`)
+      traefik.http.routers.dockyard.entrypoints: web
+      traefik.http.services.dockyard.loadbalancer.server.port: "3000"
+
+networks:
+  edge:
+    name: dockyard_edge
+  socket:
+    internal: true
+
+volumes:
+  dockyard-data:

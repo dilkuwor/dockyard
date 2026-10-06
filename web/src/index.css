@@ -1,0 +1,48 @@
+@import "tailwindcss";
+@import "@fontsource/barlow/400.css";
+@import "@fontsource/barlow/500.css";
+@import "@fontsource/barlow/600.css";
+@import "@fontsource/barlow-condensed/500.css";
+@import "@fontsource/barlow-condensed/700.css";
+
+@theme {
+  --color-paper: #edf1f3;
+  --color-panel: #f8fafb;
+  --color-ink: #142b3b;
+  --color-ink-soft: #566a79;
+  --color-rule: #c9d3da;
+  --color-signal: #e8a317;
+  --color-signal-deep: #b97f0b;
+  --color-starboard: #1e7b4e;
+  --color-port: #b3261e;
+  --color-console: #0f1f2b;
+  --color-console-text: #cfe0ea;
+
+  --font-sans: "Barlow", system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-signal-deep);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-signal) 40%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
