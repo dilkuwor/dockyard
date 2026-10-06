@@ -26,6 +26,8 @@ export const config = {
   adminPassword: required('ADMIN_PASSWORD'),
   dockerHubUsername: process.env.DOCKERHUB_USERNAME,
   dockerHubToken: process.env.DOCKERHUB_TOKEN,
+  ghcrUsername: process.env.GHCR_USERNAME,
+  ghcrToken: process.env.GHCR_TOKEN,
   deployTimeoutSeconds: Number(process.env.DEPLOY_WAIT_TIMEOUT ?? 120),
 };
 

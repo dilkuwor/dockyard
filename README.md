@@ -73,8 +73,11 @@ Add a WAF skip rule for the `/api/hooks/` path if deploys get blocked.
    compose file. Dockyard deploys it at the address you pick, or a random subdomain
    if you leave it blank. You can change the address later under **Settings**; it
    takes effect on the next deploy.
-2. Open **Deploy hook** on the app, add the four secrets to your GitHub repo, and
-   commit the workflow it shows (also in [`examples/deploy.yml`](examples/deploy.yml)).
+2. Open **Deploy hook** on the app, pick GitHub Container Registry or Docker Hub, add
+   the secrets it lists to your GitHub repo, and commit the workflow it shows (also in
+   [`examples/deploy-ghcr.yml`](examples/deploy-ghcr.yml) and [`examples/deploy.yml`](examples/deploy.yml)).
+   For private images, set `GHCR_USERNAME`/`GHCR_TOKEN` or `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN`
+   in `.env` so Dockyard can pull them.
 3. Every push to `main` builds, pushes and deploys that exact image digest.
    Roll back from **Deployments** any time.
 

@@ -1,0 +1,56 @@
+# Copy into your app's repo as .github/workflows/deploy.yml
+# Pushes the image to GitHub Container Registry (ghcr.io) using the workflow's own token,
+# so the only repo secrets needed are DOCKYARD_HOOK_URL and DOCKYARD_HOOK_SECRET
+# (the dashboard's "Deploy hook" tab shows both, and a copy of this file).
+# If the package is private, set GHCR_USERNAME and GHCR_TOKEN in Dockyard's .env so it can pull.
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Image names on ghcr.io must be lowercase.
+      - id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
+
+      - name: Tell Dockyard to deploy
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          HOOK_URL: ${{ secrets.DOCKYARD_HOOK_URL }}
+          HOOK_SECRET: ${{ secrets.DOCKYARD_HOOK_SECRET }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          BODY=$(jq -nc --arg image "$IMAGE" --arg digest "$DIGEST" --arg commit "$GITHUB_SHA" \
+            '{image: $image, digest: $digest, commit: $commit}')
+          TS=$(date +%s)
+          SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$HOOK_SECRET" -hex | sed 's/^.* //')
+          curl -fsS -X POST "$HOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Dockyard-Timestamp: $TS" \
+            -H "X-Dockyard-Signature: sha256=$SIG" \
+            -d "$BODY"

@@ -189,12 +189,19 @@ export async function ensureEdgeNetwork(): Promise<void> {
   if (create.code !== 0) throw new Error(`Could not create network ${config.edgeNetwork}: ${create.stderr}`);
 }
 
+/** Signs in to each registry that has credentials configured, so private images can be pulled. */
 export async function dockerLogin(): Promise<void> {
-  if (!config.dockerHubUsername || !config.dockerHubToken) return;
-  const res = await run(['login', '-u', config.dockerHubUsername, '--password-stdin'], {
-    input: config.dockerHubToken,
-  });
-  if (res.code !== 0) throw new Error(`Docker Hub login failed: ${res.stderr.trim()}`);
+  const logins = [
+    { name: 'Docker Hub', registry: [], username: config.dockerHubUsername, token: config.dockerHubToken },
+    { name: 'GitHub Container Registry', registry: ['ghcr.io'], username: config.ghcrUsername, token: config.ghcrToken },
+  ];
+  const failures: string[] = [];
+  for (const login of logins) {
+    if (!login.username || !login.token) continue;
+    const res = await run(['login', ...login.registry, '-u', login.username, '--password-stdin'], { input: login.token });
+    if (res.code !== 0) failures.push(`${login.name} login failed: ${res.stderr.trim()}`);
+  }
+  if (failures.length) throw new Error(failures.join(' '));
 }
 
 export async function dockerAvailable(): Promise<boolean> {
