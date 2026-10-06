@@ -56,7 +56,6 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [query, setQuery] = useState('')
 
-  const { data: meta } = useResource(api.meta, [])
   const { data: apps } = useResource(api.listApps, [], 8000)
 
   // Close mobile drawer on route changes
@@ -330,22 +329,6 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
               </nav>
             </div>
           ))}
-        </div>
-
-        {/* Where this Dockyard is reachable: its own strip above the footer, no box. */}
-        <div
-          title={meta ? `${meta.publicAccess ? 'Public access on' : 'Local only'} · ${meta.baseDomain}` : 'Online'}
-          className={cx('border-t border-rule px-4 py-2.5', collapsed && 'md:flex md:justify-center md:px-0')}
-        >
-          <div className="flex items-center gap-2 text-xs">
-            <span className="size-2 shrink-0 rounded-full bg-starboard ring-2 ring-starboard/20" />
-            <span className={cx('font-medium text-ink', collapsed && 'md:hidden')}>
-              {meta ? (meta.publicAccess ? 'Public access on' : 'Local only') : 'Online'}
-            </span>
-          </div>
-          <p className={cx('mt-0.5 truncate pl-4 font-mono text-[11px] text-ink-soft', collapsed && 'md:hidden')}>
-            {meta?.baseDomain ?? '…'}
-          </p>
         </div>
 
         {/* Sidebar footer */}
