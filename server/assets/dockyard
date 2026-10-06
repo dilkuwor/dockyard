@@ -263,9 +263,12 @@ cmd_deploy() {
 
   repo=${image#ghcr.io/}
   meta=$(api GET /api/meta) || exit 1
+  if [ "$(printf '%s' "$meta" | jq -r '.publicAccess // false')" != true ]; then
+    die "this Dockyard has no public address, so GitHub cannot call it to deploy. Set up public access on the dashboard's Settings page first."
+  fi
   if [ "$(printf '%s' "$meta" | jq -r '.globalHook // false')" = true ]; then
     # One secret for every repository: the address goes in the workflow, the secret is added by the user.
-    hook_url="https://$(printf '%s' "$meta" | jq -r .dashboardHost)/api/hooks"
+    hook_url="$(printf '%s' "$meta" | jq -r .dashboardUrl)/api/hooks"
     if have_gh && ! gh secret list --json name -q '.[].name' 2>/dev/null | grep -qx DOCKYARD_HOOK_SECRET; then
       die "this repository has no DOCKYARD_HOOK_SECRET yet. Add your Dockyard global hook secret at https://github.com/$repo/settings/secrets/actions and run this again."
     fi

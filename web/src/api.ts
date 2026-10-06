@@ -83,6 +83,29 @@ export interface RegistryCredential {
   updatedAt: number | null
 }
 
+export interface PublicAccessStatus {
+  configured: boolean
+  enabled: boolean
+  mode: 'automatic' | 'manual' | null
+  domain: string | null
+  connector: 'running' | 'stopped' | 'missing'
+  dashboardUrl: string
+  localDashboardUrl: string
+  exampleAppUrl: string
+}
+
+export interface SetupStep {
+  name: string
+  status: 'ok' | 'warning' | 'failed'
+  detail: string
+}
+
+export interface SetupResult {
+  ok: boolean
+  steps: SetupStep[]
+  status: PublicAccessStatus
+}
+
 export class ApiError extends Error {
   status: number
   details?: string[]
@@ -116,7 +139,7 @@ export const api = {
   me: () => request<{ ok: true }>('GET', '/api/auth/me'),
   login: (password: string) => request<{ ok: true }>('POST', '/api/auth/login', { password }),
   logout: () => request<{ ok: true }>('POST', '/api/auth/logout'),
-  meta: () => request<{ baseDomain: string; dashboardHost: string; globalHook: boolean }>('GET', '/api/meta'),
+  meta: () => request<{ baseDomain: string; dashboardUrl: string; publicAccess: boolean; globalHook: boolean }>('GET', '/api/meta'),
 
   listApps: () => request<AppSummary[]>('GET', '/api/apps'),
   getApp: (id: string) => request<AppDetail>('GET', `/api/apps/${id}`),
@@ -159,6 +182,17 @@ export const api = {
   globalHook: () => request<GlobalHook>('GET', '/api/global-hook'),
   enableGlobalHook: () => request<GlobalHook>('POST', '/api/global-hook'),
   disableGlobalHook: () => request<GlobalHook>('DELETE', '/api/global-hook'),
+
+  cloudflare: () => request<PublicAccessStatus>('GET', '/api/cloudflare'),
+  cloudflareZones: (apiToken: string) => request<{ id: string; name: string }[]>('POST', '/api/cloudflare/zones', { apiToken }),
+  cloudflareSetup: (body: { apiToken: string; zoneId: string; replaceDns: boolean; disableBotFightMode: boolean }) =>
+    request<SetupResult>('POST', '/api/cloudflare/setup', body),
+  cloudflareManual: (body: { domain: string; tunnelToken: string }) => request<SetupResult>('POST', '/api/cloudflare/manual', body),
+  cloudflareDisable: () => request<PublicAccessStatus>('POST', '/api/cloudflare/disable'),
+  cloudflareEnable: () => request<SetupResult>('POST', '/api/cloudflare/enable'),
+  cloudflareForget: () => request<PublicAccessStatus>('DELETE', '/api/cloudflare'),
+  onboarding: () => request<{ pending: boolean }>('GET', '/api/onboarding'),
+  completeOnboarding: () => request<{ pending: boolean }>('POST', '/api/onboarding/complete'),
 
   registries: () => request<RegistryCredential[]>('GET', '/api/registries'),
   saveRegistry: (body: { registry: string; username: string; token: string }) =>

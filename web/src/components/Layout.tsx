@@ -20,6 +20,18 @@ import {
   IconTerminal,
 } from './Icons'
 
+function Brand() {
+  return (
+    <Link to="/" className="flex min-w-0 items-center gap-2.5 font-semibold tracking-tight text-ink">
+      <Logo className="size-7" />
+      <span className="flex min-w-0 flex-col">
+        <span className="text-[15px] font-bold leading-none tracking-tight">Dockyard</span>
+        <span className="text-[11px] font-medium text-ink-soft">Control Plane</span>
+      </span>
+    </Link>
+  )
+}
+
 export default function Layout({ children, onSignOut }: { children: ReactNode; onSignOut: () => void }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -137,7 +149,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   ].filter((l) => l.label.toLowerCase().includes(query.toLowerCase()))
 
   return (
-    <div className="min-h-screen bg-paper text-ink flex flex-col md:flex-row">
+    <div className="min-h-screen bg-paper text-ink">
       {/* Mobile Backdrop */}
       {mobileOpen && (
         <div
@@ -146,25 +158,71 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
         />
       )}
 
+      {/* One bar across the window. The sidebar starts under it, so the corner is a single line. */}
+      <header className="sticky top-0 z-30 flex h-14 items-center border-b border-rule bg-panel">
+        <div className="hidden h-full w-64 shrink-0 items-center border-r border-rule px-4 md:flex">
+          <Brand />
+        </div>
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 px-4 md:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              className="rounded p-1 text-ink-soft hover:bg-paper md:hidden"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation"
+            >
+              <IconMenu className="size-5" />
+            </button>
+            <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-soft">
+              <Link to="/" className="font-medium hover:text-ink">Dashboard</Link>
+              {isAppScoped && currentApp && (
+                <>
+                  <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
+                  <span className="truncate font-semibold text-ink">{currentApp.name}</span>
+                  {currentTab && (
+                    <>
+                      <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
+                      <span className="capitalize">{currentTab}</span>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="hidden items-center gap-2 rounded-md border border-rule bg-paper/70 px-3 py-1.5 text-xs text-ink-soft transition-colors hover:border-slate-300 hover:text-ink sm:inline-flex"
+            >
+              <IconSearch className="size-3.5" />
+              <span>Search apps & tools…</span>
+              <kbd className="rounded border border-rule bg-panel px-1.5 py-0.5 font-mono text-[10px] text-ink-soft">⌘K</kbd>
+            </button>
+            <Link to="/apps/new">
+              <Button variant="primary" size="sm" className="gap-1.5">
+                <IconPlus className="size-3.5" />
+                <span>New App</span>
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex">
       {/* Sidebar (Desktop persistent, Mobile slide-over) */}
       <aside
         className={cx(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-rule bg-panel transition-transform duration-200 md:static md:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-rule bg-panel transition-transform duration-200 md:sticky md:top-14 md:z-20 md:h-[calc(100dvh-3.5rem)] md:translate-x-0',
           mobileOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full md:translate-x-0',
         )}
       >
-        {/* Brand Header */}
-        <div className="flex h-14 items-center justify-between border-b border-rule px-4">
-          <Link to="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-ink">
-            <Logo className="size-7" />
-            <div className="flex flex-col">
-              <span className="text-[15px] font-bold leading-none tracking-tight">Dockyard</span>
-              <span className="text-[11px] font-medium text-ink-soft">Control Plane</span>
-            </div>
-          </Link>
+        {/* Brand Header, mobile drawer only. On desktop the logo lives in the top bar. */}
+        <div className="flex h-14 items-center justify-between border-b border-rule px-4 md:hidden">
+          <Brand />
           <button
             type="button"
-            className="rounded p-1 text-ink-soft hover:bg-paper md:hidden"
+            className="rounded p-1 text-ink-soft hover:bg-paper"
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
           >
@@ -172,14 +230,14 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
           </button>
         </div>
 
-        {/* Host Status Pill */}
-        <div className="border-b border-rule/60 bg-paper/60 px-4 py-2.5">
+        {/* Host Status */}
+        <div className="px-4 pt-4 pb-1">
           <div className="flex items-center justify-between text-xs">
             <span className="inline-flex items-center gap-1.5 font-medium text-starboard">
               <span className="size-1.5 rounded-full bg-starboard" />
               Host Online
             </span>
-            <span className="font-mono text-[11px] text-ink-soft truncate max-w-28" title={meta?.baseDomain ?? 'dockyard'}>
+            <span className="max-w-28 truncate font-mono text-[11px] text-ink-soft" title={meta?.baseDomain ?? 'dockyard'}>
               {meta?.baseDomain ?? 'local'}
             </span>
           </div>
@@ -264,65 +322,9 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
         </div>
       </aside>
 
-      {/* Main Content Column */}
-      <div className="flex flex-1 flex-col min-w-0">
-        {/* Top Header / Operational Bar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b border-rule bg-panel/90 px-4 backdrop-blur md:px-5">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              type="button"
-              className="rounded p-1 text-ink-soft hover:bg-paper md:hidden"
-              onClick={() => setMobileOpen(true)}
-              aria-label="Open navigation"
-            >
-              <IconMenu className="size-5" />
-            </button>
-
-            {/* Breadcrumb Indicator */}
-            <div className="flex items-center gap-1.5 text-xs text-ink-soft min-w-0">
-              <Link to="/" className="hover:text-ink font-medium">Dashboard</Link>
-              {isAppScoped && currentApp && (
-                <>
-                  <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
-                  <span className="font-semibold text-ink truncate">{currentApp.name}</span>
-                  {currentTab && (
-                    <>
-                      <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
-                      <span className="capitalize">{currentTab}</span>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Quick Actions & Search */}
-          <div className="flex items-center gap-2.5">
-            {/* Quick Find (⌘K) */}
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              className="hidden sm:inline-flex items-center gap-2 rounded-md border border-rule bg-paper/70 px-3 py-1.5 text-xs text-ink-soft hover:border-slate-300 hover:text-ink transition-colors"
-            >
-              <IconSearch className="size-3.5" />
-              <span>Search apps & tools…</span>
-              <kbd className="rounded border border-rule bg-panel px-1.5 py-0.5 text-[10px] font-mono text-ink-soft">⌘K</kbd>
-            </button>
-
-            {/* Quick New App CTA */}
-            <Link to="/apps/new">
-              <Button variant="primary" size="sm" className="gap-1.5">
-                <IconPlus className="size-3.5" />
-                <span>New App</span>
-              </Button>
-            </Link>
-          </div>
-        </header>
-
-        {/* Content Canvas */}
-        <main className="min-w-0 flex-1 px-4 py-4 md:px-5 md:py-5">
-          {children}
-        </main>
+      <main className="min-w-0 flex-1 px-4 py-4 md:px-5 md:py-5">
+        {children}
+      </main>
       </div>
 
       {/* Global Command Palette (⌘K) Modal */}

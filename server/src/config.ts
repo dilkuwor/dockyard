@@ -9,7 +9,6 @@ function required(name: string): string {
   return value;
 }
 
-const baseDomain = required('BASE_DOMAIN');
 const dataDir = process.env.DATA_DIR ?? '/data';
 
 export const config = {
@@ -19,8 +18,15 @@ export const config = {
   appsDir: path.join(dataDir, 'apps'),
   publicDir: process.env.PUBLIC_DIR ?? path.resolve('public'),
   assetsDir: process.env.ASSETS_DIR ?? path.resolve('assets'),
-  baseDomain,
-  dashboardHost: process.env.DASHBOARD_HOST ?? `dockyard.${baseDomain}`,
+  // The dashboard is served at <dashboardSubdomain>.<domain>, on the local address and the public one.
+  dashboardSubdomain: process.env.DASHBOARD_SUBDOMAIN ?? 'dockyard',
+  // Without public access, apps are reachable at http://<name>.<localDomain>:<localPort> on this machine.
+  localDomain: process.env.LOCAL_DOMAIN ?? 'localhost',
+  localPort: Number(process.env.LOCAL_PORT ?? 8080),
+  cloudflareApi: process.env.CLOUDFLARE_API_URL ?? 'https://api.cloudflare.com/client/v4',
+  // Older installs configured the tunnel in .env; these are imported into the dashboard's settings once.
+  legacyDomain: process.env.BASE_DOMAIN,
+  legacyTunnelToken: process.env.CLOUDFLARE_TUNNEL_TOKEN,
   edgeNetwork: process.env.EDGE_NETWORK ?? 'dockyard_edge',
   traefikEntrypoint: process.env.TRAEFIK_ENTRYPOINT ?? 'web',
   secret: required('DOCKYARD_SECRET'),

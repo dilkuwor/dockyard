@@ -4,7 +4,8 @@ import fastifyStatic from '@fastify/static';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
-import { recoverInterruptedDeployments } from './db.js';
+import { ensureConnector, importLegacySettings } from './cloudflare.js';
+import { db, recoverInterruptedDeployments } from './db.js';
 import { dockerAvailable, ensureEdgeNetwork } from './docker.js';
 import { HttpError } from './errors.js';
 import { trackDeployedImages } from './images.js';
@@ -16,6 +17,7 @@ import { imageRoutes } from './routes/images.js';
 import { tokenRoutes } from './routes/tokens.js';
 import { agentRoutes } from './routes/agent.js';
 import { registryRoutes } from './routes/registries.js';
+import { cloudflareRoutes } from './routes/cloudflare.js';
 
 const server = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true, bodyLimit: 1024 * 1024 });
 
@@ -50,6 +52,7 @@ await server.register(imageRoutes);
 await server.register(tokenRoutes);
 await server.register(agentRoutes);
 await server.register(registryRoutes);
+await server.register(cloudflareRoutes);
 server.get('/api/health', async () => ({ ok: true }));
 
 const indexHtml = path.join(config.publicDir, 'index.html');
@@ -64,10 +67,12 @@ server.setNotFoundHandler((req, reply) => {
 });
 
 recoverInterruptedDeployments();
+importLegacySettings(db.prepare('SELECT 1 FROM apps LIMIT 1').get() !== undefined);
 
 if (await dockerAvailable()) {
   await ensureEdgeNetwork();
   await loginRegistries().catch((err) => server.log.warn(err.message));
+  await ensureConnector().catch((err) => server.log.warn(err.message));
   void trackDeployedImages().catch((err) => server.log.warn(err.message));
 } else {
   server.log.warn('Docker is not reachable. Mount /var/run/docker.sock to manage apps.');

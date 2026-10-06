@@ -1,17 +1,9 @@
 name: dockyard
 
 services:
-  # Public entry point: an outbound tunnel to Cloudflare. No router ports needed.
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env}
-    networks: [edge]
-    restart: unless-stopped
-    depends_on: [traefik]
-
-  # Routes every *.yourdomain request to the right container by hostname.
+  # Routes every request to the right container by the first part of its hostname.
+  # Public access is optional: when it is set up from the dashboard, Dockyard itself runs
+  # a Cloudflare tunnel connector next to this proxy.
   traefik:
     image: traefik:v3
     command:
@@ -23,6 +15,9 @@ services:
       - --entrypoints.web.forwardedheaders.insecure=true
       - --accesslog=true
       - --log.level=INFO
+    ports:
+      # Local addresses: http://dockyard.localhost:8080 and http://<app>.localhost:8080.
+      - "${LOCAL_BIND:-127.0.0.1}:${LOCAL_PORT:-8080}:80"
     networks: [edge, socket]
     restart: unless-stopped
     depends_on: [socket-proxy]
@@ -45,18 +40,21 @@ services:
     environment:
       DATA_DIR: /data
       EDGE_NETWORK: dockyard_edge
+      LOCAL_PORT: ${LOCAL_PORT:-8080}
+      DASHBOARD_SUBDOMAIN: ${DASHBOARD_SUBDOMAIN:-dockyard}
     volumes:
       # Full Docker access is required to run deployments. Treat the dashboard password like root.
       - /var/run/docker.sock:/var/run/docker.sock
       - dockyard-data:/data
     ports:
-      # Local-only access for first setup and when the tunnel is down.
+      # Direct local access to the dashboard, bypassing the proxy.
       - "127.0.0.1:3000:3000"
     networks: [edge]
     restart: unless-stopped
     labels:
       traefik.enable: "true"
-      traefik.http.routers.dockyard.rule: Host(`${DASHBOARD_HOST:?Set DASHBOARD_HOST in .env}`)
+      # dockyard.<anything>: the local address and, with public access on, your own domain.
+      traefik.http.routers.dockyard.rule: HostRegexp(`^${DASHBOARD_SUBDOMAIN:-dockyard}\.`)
       traefik.http.routers.dockyard.entrypoints: web
       traefik.http.services.dockyard.loadbalancer.server.port: "3000"
 

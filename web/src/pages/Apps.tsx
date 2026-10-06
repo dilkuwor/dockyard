@@ -251,7 +251,7 @@ export default function AppsPage() {
                               rel="noreferrer"
                               className="inline-flex items-center gap-1 font-mono text-xs text-ink-soft hover:text-accent hover:underline mt-0.5"
                             >
-                              <span>{app.url.replace('https://', '')}</span>
+                              <span>{app.url.replace(/^https?:\/\//, '')}</span>
                               <IconExternalLink className="size-3 shrink-0 opacity-60" />
                             </a>
                           </td>

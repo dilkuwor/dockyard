@@ -165,7 +165,7 @@ export function setServiceImage(composeText: string, service: string, image: str
 
 export interface RenderOptions {
   appId: string;
-  host: string;
+  slug: string;
   primaryService: string;
   port: number;
   env: { key: string; value: string }[];
@@ -189,7 +189,9 @@ export function renderCompose(composeText: string, opts: RenderOptions): string 
   const primary = doc.services[opts.primaryService];
   Object.assign(primary.labels, {
     'traefik.enable': 'true',
-    [`traefik.http.routers.${router}.rule`]: `Host(\`${opts.host}\`)`,
+    // Match on the first label only, so the app answers on its local address and on
+    // any public domain without being redeployed when public access is switched on or off.
+    [`traefik.http.routers.${router}.rule`]: `HostRegexp(\`^${opts.slug}\\.\`)`,
     [`traefik.http.routers.${router}.entrypoints`]: opts.entrypoint,
     [`traefik.http.routers.${router}.service`]: router,
     [`traefik.http.services.${router}.loadbalancer.server.port`]: String(opts.port),

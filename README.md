@@ -17,55 +17,71 @@ GitHub Actions ── push ──▶ Docker Hub
 
 | Service        | Job                                                                 |
 | -------------- | ------------------------------------------------------------------- |
-| `cloudflared`  | Outbound tunnel to Cloudflare. No open ports on your router.         |
+| `cloudflared`  | Optional. Outbound tunnel to Cloudflare, started by Dockyard when you turn on public access. |
 | `traefik`      | Routes each hostname to the right container using Docker labels.    |
 | `socket-proxy` | Read-only Docker API for Traefik.                                   |
 | `dockyard`     | API, dashboard and deploy hooks (Node/TypeScript + React).          |
 
 ## Setup
 
-### 1. Cloudflare tunnel and DNS
-
-1. In the Cloudflare dashboard, open **Zero Trust → Networks → Tunnels** and
-   create a tunnel (type *Cloudflared*). Copy the token from the install command.
-2. In the tunnel's **Public hostnames**, add:
-   - Subdomain `*`, domain `bytetech.cloud`, service `HTTP` → `traefik:80`
-3. In **DNS** for bytetech.cloud, make sure there is a proxied `CNAME` record
-   `*` → `<tunnel-id>.cfargotunnel.com`. The dashboard sometimes skips this for
-   wildcards; add it by hand if it's missing.
-
-Cloudflare's free certificate covers one wildcard level, so `abc.bytetech.cloud`
-works but `abc.apps.bytetech.cloud` would not.
-
-### 2. Configure
+### 1. Configure and start
 
 ```bash
 cp .env.example .env
 openssl rand -hex 32   # paste into DOCKYARD_SECRET
-# fill in CLOUDFLARE_TUNNEL_TOKEN and ADMIN_PASSWORD
-```
-
-### 3. Start
-
-```bash
+# choose an ADMIN_PASSWORD
 docker compose up -d --build
 ```
 
-Open `https://dockyard.bytetech.cloud` (or `http://localhost:3000` on the
-machine itself) and sign in with `ADMIN_PASSWORD`.
+Open `http://dockyard.localhost:8080` on the machine itself (or `http://localhost:3000`)
+and sign in with `ADMIN_PASSWORD`. On a remote server, reach it through an SSH tunnel:
+`ssh -L 8080:localhost:8080 you@server`.
 
-### 4. Lock down the dashboard (recommended)
+### 2. Choose how apps are reachable
+
+The first sign-in asks one question, and you can change the answer later under
+**Settings → Public access**:
+
+- **On this machine only.** Nothing to set up. Apps are served at
+  `http://<name>.localhost:8080`. (Chrome, Firefox and curl resolve `*.localhost`
+  by themselves.)
+- **On the internet, with your own domain.** Uses a Cloudflare tunnel, so no router
+  ports are opened. Paste a Cloudflare API token and Dockyard does the rest: it creates
+  the tunnel, routes `*.yourdomain` to it, adds the wildcard DNS record, adds a WAF rule
+  so deploy hooks get past Super Bot Fight Mode, and starts the connector. The token is
+  used once and not stored. Apps are then served at `https://<name>.yourdomain`.
+
+The API token needs: Account · Cloudflare Tunnel · Edit; Zone · Zone · Read;
+Zone · DNS · Edit; Zone · Zone WAF · Edit; and optionally Zone · Bot Management · Edit.
+The domain must already be on Cloudflare.
+
+Good to know:
+
+- Turning public access off or on needs no redeploys. Apps are routed by the first part
+  of their address, so each one answers on the local address and on your domain.
+- Cloudflare's free certificate covers one wildcard level, so `abc.example.com` works
+  but `abc.apps.example.com` would not.
+- On Cloudflare's free plan, **Bot Fight Mode** can block GitHub from calling deploy
+  hooks and cannot be skipped for one address. Setup reports whether it is on and can
+  turn it off for you. On paid plans the skip rule for Super Bot Fight Mode is enough.
+- Prefer to do the Cloudflare side yourself? Choose "I already have a tunnel" and enter
+  your domain and tunnel token. The tunnel needs a published application route
+  `*.yourdomain` → `HTTP` → `traefik:80` and a proxied `CNAME` `*` →
+  `<tunnel-id>.cfargotunnel.com`.
+- Upgrading from a version that kept `BASE_DOMAIN` and `CLOUDFLARE_TUNNEL_TOKEN` in
+  `.env`: they are imported into the dashboard's settings on first start and can then be
+  removed from `.env`. Run `docker compose up -d --build --remove-orphans` once to retire
+  the old `cloudflared` service; Dockyard now runs the connector itself.
+
+### 3. Lock down the dashboard (recommended with public access)
 
 Dockyard can run anything on this machine, so put Cloudflare Access in front of it:
 
 1. **Zero Trust → Access → Applications → Add** a self-hosted app for
-   `dockyard.bytetech.cloud` with a policy allowing only your email.
-2. Add a second application for `dockyard.bytetech.cloud/api/hooks` with a
+   `dockyard.yourdomain` with a policy allowing only your email.
+2. Add a second application for `dockyard.yourdomain/api/hooks` with a
    **Bypass** policy for Everyone, so GitHub can reach the deploy hooks. Hooks are
    protected by their own HMAC signatures.
-
-If Cloudflare's Bot Fight Mode is on, it may challenge GitHub's `curl` calls.
-Add a WAF skip rule for the `/api/hooks/` path if deploys get blocked.
 
 ## Deploying an app
 
@@ -161,8 +177,10 @@ server/src/
   deployer.ts     Per-app deploy queue: render → pull → up --wait
   images.ts       Tracks pulled images and prunes the unused ones
   registries.ts   Saved registry credentials for pulling private images
+  site.ts         Local or public addresses, depending on whether public access is on
+  cloudflare.ts   Sets up the Cloudflare tunnel, DNS and hook rule, and runs the connector
   docker.ts       docker / docker compose CLI wrapper
-  routes/         auth, apps, hooks, images, tokens, agent, registries
+  routes/         auth, apps, hooks, images, tokens, agent, registries, cloudflare
 server/assets/
   dockyard        The CLI that agents and people run inside an app's repository
   agent-guide.md  The deployment guide served to agents

@@ -114,6 +114,7 @@ const registries = [
 
 export default function Webhook({ app }: { app: AppDetail }) {
   const { data: hook, error, setData } = useResource(() => api.getHook(app.id), [app.id])
+  const { data: meta } = useResource(api.meta, [])
   const [revealed, setRevealed] = useState(false)
   const [rotateError, setRotateError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
@@ -139,6 +140,12 @@ export default function Webhook({ app }: { app: AppDetail }) {
 
   return (
     <div className="space-y-5">
+      {meta && !meta.publicAccess && (
+        <div role="note" className="rounded-md border border-warn/30 bg-warn/5 px-4 py-3 text-sm">
+          GitHub cannot reach this Dockyard yet, because it has no public address. Deploy hooks start working once you set up
+          public access under <Link to="/settings" className="text-accent hover:underline">Settings</Link>.
+        </div>
+      )}
       <p className="max-w-2xl text-ink-soft">
         After CI pushes a new image, it calls this URL and Dockyard deploys that exact image. Requests must be signed
         with the secret, so nobody else can trigger a deploy.

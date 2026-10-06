@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
 import { notFound } from '../errors.js';
+import { addressDomain, dashboardUrl } from '../site.js';
 
 function asset(name: string): string {
   const file = path.join(config.assetsDir, name);
@@ -15,8 +16,8 @@ export async function agentRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/agent/guide', async (_req, reply) => {
     reply.type('text/markdown; charset=utf-8');
     return asset('agent-guide.md')
-      .replaceAll('{{URL}}', `https://${config.dashboardHost}`)
-      .replaceAll('{{BASE_DOMAIN}}', config.baseDomain);
+      .replaceAll('{{URL}}', dashboardUrl())
+      .replaceAll('{{BASE_DOMAIN}}', addressDomain());
   });
 
   app.get('/api/agent/cli', async (_req, reply) => {

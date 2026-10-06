@@ -6,9 +6,9 @@ import { useApiToken } from './tokens.js';
 
 const COOKIE = 'dy_session';
 const PUBLIC_API = [/^\/api\/health$/, /^\/api\/auth\/login$/, /^\/api\/hooks(\/|$)/];
-// API tokens can do everything except manage tokens, the server-wide hook secret or
-// registry credentials, so a leaked one can't mint more access.
-const SESSION_ONLY = /^\/api\/(tokens|global-hook|registries)(\/|$)/;
+// API tokens can do everything except manage tokens, the server-wide hook secret,
+// registry credentials or public access, so a leaked one can't mint more access.
+const SESSION_ONLY = /^\/api\/(tokens|global-hook|registries|cloudflare|onboarding)(\/|$)/;
 const BEARER = /^Bearer (dyt_[a-f0-9]{64})$/;
 
 const attempts = new Map<string, { count: number; resetAt: number }>();

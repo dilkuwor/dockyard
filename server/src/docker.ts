@@ -11,10 +11,10 @@ export interface RunResult {
 
 export function run(
   args: string[],
-  opts: { onLine?: (line: string) => void; input?: string; timeoutMs?: number } = {},
+  opts: { onLine?: (line: string) => void; input?: string; timeoutMs?: number; env?: Record<string, string> } = {},
 ): Promise<RunResult> {
   return new Promise((resolve) => {
-    const child = spawn('docker', args, { env: process.env });
+    const child = spawn('docker', args, { env: opts.env ? { ...process.env, ...opts.env } : process.env });
     let stdout = '';
     let stderr = '';
     let pending = '';
@@ -196,12 +196,60 @@ const registryArg = (registry: string) => (registry === 'docker.io' ? [] : [regi
 export async function registryLogin(registry: string, username: string, token: string): Promise<string | null> {
   const res = await run(['login', ...registryArg(registry), '-u', username, '--password-stdin'], { input: token, timeoutMs: 30_000 });
   if (res.code === 0) return null;
-  const lines = res.stderr.split('\n').map((line) => line.trim()).filter(Boolean);
-  return lines.pop() ?? 'Docker did not say why.';
+  return lastLine(res.stderr);
 }
 
 export async function registryLogout(registry: string): Promise<void> {
   await run(['logout', ...registryArg(registry)]);
+}
+
+const CONNECTOR = 'dockyard-cloudflared';
+const lastLine = (text: string) => text.split('\n').map((line) => line.trim()).filter(Boolean).pop() ?? 'Docker did not say why.';
+
+/** The label lets Dockyard tell whether the running connector already uses the current token. */
+export async function connectorState(): Promise<{ status: 'running' | 'stopped' | 'missing'; tokenId: string }> {
+  const res = await run(['inspect', '--format', '{{.State.Running}} {{index .Config.Labels "dockyard.token"}}', CONNECTOR]);
+  if (res.code !== 0) return { status: 'missing', tokenId: '' };
+  const [running, tokenId = ''] = res.stdout.trim().split(' ');
+  return { status: running === 'true' ? 'running' : 'stopped', tokenId };
+}
+
+/**
+ * Runs the Cloudflare tunnel connector next to Traefik. The token travels in the
+ * environment, not on the command line. Returns null on success, or Docker's explanation.
+ */
+export async function startConnector(token: string, tokenId: string): Promise<string | null> {
+  await stopConnector();
+  const res = await run(
+    [
+      'run', '-d', '--name', CONNECTOR, '--restart', 'unless-stopped', '--network', config.edgeNetwork,
+      '--label', 'dockyard.role=connector', '--label', `dockyard.token=${tokenId}`, '-e', 'TUNNEL_TOKEN',
+      'cloudflare/cloudflared:latest', 'tunnel', '--no-autoupdate', 'run',
+    ],
+    { env: { TUNNEL_TOKEN: token }, timeoutMs: 180_000 },
+  );
+  return res.code === 0 ? null : lastLine(res.stderr);
+}
+
+/** Stops gracefully first, so the connector can tell Cloudflare it is leaving instead of dropping requests. */
+export async function stopConnector(): Promise<void> {
+  await run(['stop', '-t', '10', CONNECTOR]);
+  await run(['rm', '-f', CONNECTOR]);
+}
+
+/** Waits until the connector reports a registered connection to Cloudflare. Returns null, or what its log says instead. */
+export async function waitForConnector(timeoutMs = 30_000): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs;
+  let log = '';
+  while (Date.now() < deadline) {
+    const res = await run(['logs', '--tail', '80', CONNECTOR]);
+    log = res.stdout + res.stderr;
+    if (/Registered tunnel connection/.test(log)) return null;
+    if (/Unauthorized|Invalid tunnel secret|provided tunnel token is not valid/i.test(log)) break;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  const errors = log.split('\n').filter((line) => / ERR /.test(line)).map((line) => line.replace(/^\S+ ERR /, '').trim());
+  return errors.pop() ?? 'The connector did not report a connection to Cloudflare in time.';
 }
 
 export async function dockerAvailable(): Promise<boolean> {

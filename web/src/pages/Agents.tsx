@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import { api, type ApiToken, type GlobalHook } from '../api'
 import { Button, Card, CopyButton, ErrorNote, TextInput } from '../components/ui'
 import { IconWebhook, IconTerminal, IconCheck, IconKey, IconPlus } from '../components/Icons'
@@ -134,6 +135,7 @@ function GlobalHookSection() {
 
 export default function AgentsPage() {
   const { data: tokens, error, reload } = useResource(api.tokens, [])
+  const { data: meta } = useResource(api.meta, [])
   const [name, setName] = useState('')
   const [created, setCreated] = useState<(ApiToken & { token: string }) | null>(null)
   const [revoking, setRevoking] = useState<string | null>(null)
@@ -185,6 +187,13 @@ chmod +x ~/.local/bin/dockyard`
           Manage API tokens for autonomous AI coding agents (Claude Code, Gemini, Copilot) and configure global CI/CD webhooks.
         </p>
       </div>
+
+      {meta && !meta.publicAccess && (
+        <div role="note" className="rounded-md border border-warn/30 bg-warn/5 px-4 py-3 text-sm">
+          This Dockyard has no public address, so GitHub cannot call it and <span className="font-mono text-xs">dockyard deploy</span> will
+          not work yet. Set up public access under <Link to="/settings" className="text-accent hover:underline">Settings</Link> first.
+        </div>
+      )}
 
       {/* Access Tokens Management */}
       <Card className="p-6 space-y-6">

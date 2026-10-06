@@ -4,8 +4,15 @@ This guide is for an AI agent or script deploying an app to the Dockyard server 
 
 ## How deployment works here
 
-Dockyard runs container images on one machine and gives every app a public HTTPS
-address of the form `https://<address>.{{BASE_DOMAIN}}`. It does not build code.
+Dockyard runs container images on one machine and gives every app an address of the
+form `<address>.{{BASE_DOMAIN}}`. It does not build code.
+
+Check `GET /api/meta` first. If `publicAccess` is `false`, this Dockyard is local-only:
+GitHub cannot reach it, so the push-to-deploy flow below does not work and
+`dockyard deploy` refuses to run. Tell the user to set up public access on the
+dashboard's Settings page (only they can), or create the app from an existing image
+with `POST /api/apps`, which works without public access.
+
 The path from source to a live app is:
 
 1. The app's code lives in a GitHub repository with a `Dockerfile` at its root.
@@ -57,7 +64,7 @@ The `dockyard` command below sets all of this up in one step.
    ```
 
    - `--port` is the port from step 1. It is required the first time.
-   - `--address` is optional: the app is served at `https://my-app.{{BASE_DOMAIN}}`.
+   - `--address` is optional: the app is served at `my-app.{{BASE_DOMAIN}}`.
      Use lowercase letters, digits and hyphens. Without it, Dockyard picks a random one.
    - The command registers the app, commits `.github/workflows/dockyard.yml`, pushes
      the current branch, and waits until the app is live. It prints the address when done.
@@ -111,7 +118,7 @@ Every request needs `Authorization: Bearer $DOCKYARD_TOKEN`. Bodies and response
 
 | Call | Purpose |
 | --- | --- |
-| `GET /api/meta` | Base domain, whether the global hook is on, and which registries Dockyard has credentials for |
+| `GET /api/meta` | Address domain, whether public access and the global hook are on, and which registries Dockyard has credentials for |
 | `GET /api/apps` | List apps with state and address |
 | `POST /api/apps` | Create: `{name, slug?, sourceType: "image", image, port, deploy?}` or `{name, slug?, sourceType: "compose", compose, primaryService?, port}` |
 | `GET /api/apps/:id` | One app, with its containers |

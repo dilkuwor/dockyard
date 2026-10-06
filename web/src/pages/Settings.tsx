@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { api, type RegistryCredential } from '../api'
 import { Button, Card, ErrorNote, Field, Select, TextInput } from '../components/ui'
-import { IconKey, IconCheck, IconServer, IconPlus } from '../components/Icons'
+import { IconKey, IconCheck, IconServer, IconPlus, IconExternalLink } from '../components/Icons'
 import { timeAgo, useResource } from '../lib'
+import PublicAccess from '../components/PublicAccess'
 
 const presets = [
   {
@@ -66,11 +67,27 @@ export default function SettingsPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Registry Credentials & Platform Settings</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Platform Settings</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Configure authentication for private container registries so Dockyard can pull private images securely.
+          Public access for your apps, and credentials for private container registries.
         </p>
       </div>
+
+      {/* Public access through Cloudflare */}
+      <Card className="p-6 space-y-5">
+        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
+          <div className="rounded-md bg-accent/10 p-2 text-accent">
+            <IconExternalLink className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-ink">Public access (Cloudflare)</h2>
+            <p className="text-xs text-ink-soft">
+              Give apps a public HTTPS address on your own domain, or keep everything on this machine.
+            </p>
+          </div>
+        </div>
+        <PublicAccess />
+      </Card>
 
       <ErrorNote error={error} />
       <ErrorNote error={removeError} />

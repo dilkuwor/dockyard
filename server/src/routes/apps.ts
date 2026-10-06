@@ -11,7 +11,8 @@ import {
   removeAppDir,
 } from '../docker.js';
 import { getServiceImage, imageCompose, parseCompose, validateCompose } from '../compose.js';
-import { appEnv, appHost, enqueueDeploy } from '../deployer.js';
+import { appEnv, enqueueDeploy } from '../deployer.js';
+import { addressDomain, appUrl, dashboardUrl, publicDomain } from '../site.js';
 import { badRequest, HttpError, notFound } from '../errors.js';
 import { generateSlug } from '../slug.js';
 import { globalHookEnabled } from './hooks.js';
@@ -51,7 +52,7 @@ function toDto(app: AppRow) {
     id: app.id,
     name: app.name,
     slug: app.slug,
-    url: `https://${appHost(app)}`,
+    url: appUrl(app.slug),
     sourceType: app.source_type,
     primaryService: app.primary_service,
     port: app.port,
@@ -83,7 +84,7 @@ function validSlug(slug: unknown, appId?: string): string {
   if (!SLUG.test(value)) {
     throw badRequest('Use 1 to 63 lowercase letters, digits and hyphens for the address, with no hyphen at either end.');
   }
-  if (`${value}.${config.baseDomain}` === config.dashboardHost) {
+  if (value === config.dashboardSubdomain) {
     throw badRequest('That address is used by the Dockyard dashboard.');
   }
   const taken = db.prepare('SELECT id FROM apps WHERE slug = ?').get(value) as { id: string } | undefined;
@@ -101,8 +102,10 @@ function uniqueSlug(): string {
 
 export async function appRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/meta', async () => ({
-    baseDomain: config.baseDomain,
-    dashboardHost: config.dashboardHost,
+    // What follows an app's name in its address: the public domain, or "localhost:8080" without public access.
+    baseDomain: addressDomain(),
+    dashboardUrl: dashboardUrl(),
+    publicAccess: publicDomain() !== null,
     globalHook: globalHookEnabled(),
     registries: {
       ghcr: hasCredentials('ghcr.io'),
@@ -262,14 +265,14 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { id: string } }>('/api/apps/:id/hook', async (req) => {
     const row = getApp(req.params.id);
-    return { url: `https://${config.dashboardHost}/api/hooks/${row.id}`, secret: decrypt(row.hook_secret_enc) };
+    return { url: `${dashboardUrl()}/api/hooks/${row.id}`, secret: decrypt(row.hook_secret_enc) };
   });
 
   app.post<{ Params: { id: string } }>('/api/apps/:id/hook/rotate', async (req) => {
     const row = getApp(req.params.id);
     const secret = newHookSecret();
     db.prepare('UPDATE apps SET hook_secret_enc = ?, updated_at = ? WHERE id = ?').run(encrypt(secret), Date.now(), row.id);
-    return { url: `https://${config.dashboardHost}/api/hooks/${row.id}`, secret };
+    return { url: `${dashboardUrl()}/api/hooks/${row.id}`, secret };
   });
 
   app.get<{ Params: { id: string } }>('/api/apps/:id/stats', async (req) => {

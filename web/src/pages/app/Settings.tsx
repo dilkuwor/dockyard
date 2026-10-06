@@ -64,7 +64,7 @@ export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: ()
           <span className="flex max-w-md">
             <TextInput value={slug} onChange={(e) => setSlug(e.target.value)} className="rounded-r-none font-mono text-[13px]" />
             <span className="inline-flex items-center rounded-r-md border border-l-0 border-rule bg-paper px-3 font-mono text-[13px] whitespace-nowrap text-ink-soft">
-              {app.url.replace('https://', '').slice(app.slug.length)}
+              {app.url.replace(/^https?:\/\//, '').slice(app.slug.length)}
             </span>
           </span>
         </Field>

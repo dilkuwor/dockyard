@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { getServiceImage } from '../compose.js';
-import { config } from '../config.js';
+import { dashboardUrl } from '../site.js';
 import { decrypt, encrypt, hmacHex, newHookSecret, safeEqual } from '../crypto.js';
 import { db, getSetting, setSetting, type AppRow } from '../db.js';
 import { enqueueDeploy } from '../deployer.js';
@@ -60,7 +60,7 @@ function parseDeploy(payload: unknown): { image?: string; commitSha?: string } {
   return { image, commitSha };
 }
 
-const globalHookUrl = () => `https://${config.dashboardHost}/api/hooks`;
+const globalHookUrl = () => `${dashboardUrl()}/api/hooks`;
 
 export function globalHookEnabled(): boolean {
   return getSetting(GLOBAL_HOOK) !== null;

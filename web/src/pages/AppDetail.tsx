@@ -78,7 +78,7 @@ export default function AppDetailPage() {
               rel="noreferrer"
               className="inline-flex min-w-0 items-center gap-1 font-mono hover:text-accent hover:underline"
             >
-              <span className="truncate">{app.url.replace('https://', '')}</span>
+              <span className="truncate">{app.url.replace(/^https?:\/\//, '')}</span>
               <IconExternalLink className="size-3 shrink-0" />
             </a>
             <button

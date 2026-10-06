@@ -5,13 +5,10 @@ import { compose, writeComposeFile } from './docker.js';
 import { getServiceImage, renderCompose, setServiceImage } from './compose.js';
 import { notFound } from './errors.js';
 import { trackImages } from './images.js';
+import { appUrl } from './site.js';
 
 const MAX_LOG = 200_000;
 const queues = new Map<string, Promise<void>>();
-
-export function appHost(app: Pick<AppRow, 'slug'>): string {
-  return `${app.slug}.${config.baseDomain}`;
-}
 
 export function appEnv(app: Pick<AppRow, 'env_enc'>): { key: string; value: string }[] {
   if (!app.env_enc) return [];
@@ -97,13 +94,12 @@ async function runDeployment(deploymentId: string): Promise<void> {
   db.prepare("UPDATE deployments SET status = 'running' WHERE id = ?").run(deploymentId);
 
   try {
-    const host = appHost(app);
-    log(`Deploying ${app.name} to https://${host}`);
+    log(`Deploying ${app.name} to ${appUrl(app.slug)}`);
     if (deployment.image) log(`Image: ${deployment.image}`);
 
     const rendered = renderCompose(deployment.compose, {
       appId: app.id,
-      host,
+      slug: app.slug,
       primaryService: app.primary_service,
       port: app.port,
       env: appEnv(app),
@@ -126,7 +122,7 @@ async function runDeployment(deploymentId: string): Promise<void> {
       Date.now(),
       app.id,
     );
-    log(`\nLive at https://${host}`);
+    log(`\nLive at ${appUrl(app.slug)}`);
     finish('succeeded');
   } catch (err) {
     log(`\nDeployment failed: ${(err as Error).message}`);
