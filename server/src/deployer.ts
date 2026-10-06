@@ -4,6 +4,7 @@ import { db, type AppRow, type DeploymentRow } from './db.js';
 import { compose, writeComposeFile } from './docker.js';
 import { getServiceImage, renderCompose, setServiceImage } from './compose.js';
 import { notFound } from './errors.js';
+import { trackImages } from './images.js';
 
 const MAX_LOG = 200_000;
 const queues = new Map<string, Promise<void>>();
@@ -114,6 +115,7 @@ async function runDeployment(deploymentId: string): Promise<void> {
     log('\n$ docker compose pull');
     const pull = await compose.pull(app.id, log);
     if (pull.code !== 0) throw new Error('Pulling images failed. Check the image name and registry access.');
+    await trackImages([deployment.compose]);
 
     log('\n$ docker compose up -d --wait');
     const up = await compose.up(app.id, log);

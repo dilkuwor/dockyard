@@ -7,9 +7,11 @@ import { config } from './config.js';
 import { recoverInterruptedDeployments } from './db.js';
 import { dockerAvailable, dockerLogin, ensureEdgeNetwork } from './docker.js';
 import { HttpError } from './errors.js';
+import { trackDeployedImages } from './images.js';
 import { authRoutes, requireAuth } from './routes/auth.js';
 import { appRoutes } from './routes/apps.js';
 import { hookRoutes } from './routes/hooks.js';
+import { imageRoutes } from './routes/images.js';
 
 const server = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true, bodyLimit: 1024 * 1024 });
 
@@ -40,6 +42,7 @@ server.addHook('onRequest', requireAuth);
 await server.register(authRoutes);
 await server.register(appRoutes);
 await server.register(hookRoutes);
+await server.register(imageRoutes);
 server.get('/api/health', async () => ({ ok: true }));
 
 const indexHtml = path.join(config.publicDir, 'index.html');
@@ -58,8 +61,12 @@ recoverInterruptedDeployments();
 if (await dockerAvailable()) {
   await ensureEdgeNetwork();
   await dockerLogin().catch((err) => server.log.warn(err.message));
+  void trackDeployedImages().catch((err) => server.log.warn(err.message));
 } else {
   server.log.warn('Docker is not reachable. Mount /var/run/docker.sock to manage apps.');
 }
 
 await server.listen({ port: config.port, host: config.host });
+
+// As PID 1 in the container, Node gets no default SIGTERM handler; without this, `docker stop` waits 10s and kills us.
+for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => process.exit(0));

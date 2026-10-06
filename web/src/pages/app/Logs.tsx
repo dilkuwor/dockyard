@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AppDetail } from '../../api'
 import { Button } from '../../components/ui'
+import { cx } from '../../lib'
 
 const MAX_LINES = 3000
 
@@ -35,19 +36,20 @@ export default function Logs({ app }: { app: AppDetail }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className={connected ? 'font-semibold text-starboard' : 'font-semibold text-ink-soft'}>
+        <span className={cx('inline-flex items-center gap-2 font-medium', connected ? 'text-starboard' : 'text-ink-soft')}>
+          <span aria-hidden className={cx('size-1.5 rounded-full', connected ? 'animate-pulse bg-starboard' : 'bg-ink-soft/60')} />
           {connected ? 'Streaming live' : 'Stream closed'}
         </span>
-        {!connected && <Button className="px-2.5 py-1 text-sm" onClick={() => setSession((s) => s + 1)}>Reconnect</Button>}
-        <label className="ml-auto flex items-center gap-2 text-[15px]">
+        {!connected && <Button size="sm" onClick={() => setSession((s) => s + 1)}>Reconnect</Button>}
+        <label className="ml-auto flex items-center gap-2">
           <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="size-4 accent-ink" />
           Follow new lines
         </label>
-        <Button variant="quiet" className="px-2.5 py-1 text-sm" onClick={() => setLines([])}>Clear</Button>
+        <Button variant="quiet" size="sm" onClick={() => setLines([])}>Clear</Button>
       </div>
       <pre
         ref={paneRef}
-        className="h-[60vh] overflow-auto bg-console px-4 py-3 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap text-console-text"
+        className="h-[60vh] overflow-auto rounded-lg bg-console px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-console-text"
       >
         {lines.length ? lines.join('\n') : 'No log output yet.'}
       </pre>

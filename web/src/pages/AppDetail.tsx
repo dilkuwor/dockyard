@@ -48,24 +48,32 @@ export default function AppDetailPage() {
 
   return (
     <div>
-      <Link to="/" className="text-[15px] text-ink-soft hover:text-ink">Apps</Link>
-      <h1 className="mt-1 text-2xl font-semibold">{app.name}</h1>
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px] text-ink-soft">
+        <Link to="/" className="hover:text-ink">Apps</Link>
+        <span aria-hidden>/</span>
+        <span className="truncate text-ink">{app.name}</span>
+      </nav>
 
-      <a
-        href={app.url}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-1 block font-display text-[clamp(2rem,6vw,4.25rem)] leading-[0.95] font-bold tracking-tight break-all decoration-signal decoration-4 underline-offset-8 hover:underline"
-      >
-        {app.url.replace('https://', '')}
-      </a>
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">{app.name}</h1>
+            <AppStatus state={deploying ? 'deploying' : state} />
+          </div>
+          <a
+            href={app.url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-flex max-w-full items-center gap-1 text-accent hover:underline"
+          >
+            <span className="truncate">{app.url.replace('https://', '')}</span>
+            <svg viewBox="0 0 16 16" aria-hidden className="size-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 3.5h6.5V10M12.5 3.5 4 12" />
+            </svg>
+          </a>
+        </div>
 
-      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
-        <AppStatus state={deploying ? 'deploying' : state} />
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" busy={busy === 'deploy'} disabled={deploying} onClick={() => act('deploy', () => api.deploy(id))}>
-            Deploy now
-          </Button>
           {state === 'stopped' ? (
             <Button busy={busy === 'start'} onClick={() => act('start', () => api.action(id, 'start'))}>Start</Button>
           ) : (
@@ -78,27 +86,32 @@ export default function AppDetailPage() {
               </Button>
             </>
           )}
+          <Button variant="primary" busy={busy === 'deploy'} disabled={deploying} onClick={() => act('deploy', () => api.deploy(id))}>
+            Deploy now
+          </Button>
         </div>
       </div>
       {actionError != null && <div className="mt-4"><ErrorNote error={actionError} /></div>}
 
-      <nav className="mt-8 flex gap-1 overflow-x-auto border-b-2 border-ink" aria-label="App sections">
-        {tabs.map((t) => (
-          <NavLink
-            key={t.key}
-            to={`/apps/${id}${t.key ? `/${t.key}` : ''}`}
-            end
-            className={({ isActive }) =>
-              cx('-mb-0.5 border-b-4 px-3 py-2 text-[15px] font-semibold whitespace-nowrap',
-                isActive ? 'border-signal text-ink' : 'border-transparent text-ink-soft hover:text-ink')
-            }
-          >
-            {t.label}
-          </NavLink>
-        ))}
-      </nav>
+      <div className="mt-7 border-b border-rule">
+        <nav className="-mb-px flex gap-1 overflow-x-auto overflow-y-hidden" aria-label="App sections">
+          {tabs.map((t) => (
+            <NavLink
+              key={t.key}
+              to={`/apps/${id}${t.key ? `/${t.key}` : ''}`}
+              end
+              className={({ isActive }) =>
+                cx('border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+                  isActive ? 'border-ink text-ink' : 'border-transparent text-ink-soft hover:text-ink')
+              }
+            >
+              {t.label}
+            </NavLink>
+          ))}
+        </nav>
+      </div>
 
-      <div className="pt-7">
+      <div className="pt-6">
         {tab === '' && <Overview app={app} />}
         {tab === 'deployments' && <Deployments app={app} onChange={reload} />}
         {tab === 'environment' && <Environment app={app} />}

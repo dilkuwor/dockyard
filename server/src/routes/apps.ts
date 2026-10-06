@@ -73,6 +73,22 @@ function validPort(port: unknown): number {
   return n;
 }
 
+const SLUG = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** A subdomain the user picked instead of a random one. One level only, so the wildcard certificate covers it. */
+function validSlug(slug: unknown, appId?: string): string {
+  const value = String(slug ?? '').trim().toLowerCase();
+  if (!SLUG.test(value)) {
+    throw badRequest('Use 1 to 63 lowercase letters, digits and hyphens for the address, with no hyphen at either end.');
+  }
+  if (`${value}.${config.baseDomain}` === config.dashboardHost) {
+    throw badRequest('That address is used by the Dockyard dashboard.');
+  }
+  const taken = db.prepare('SELECT id FROM apps WHERE slug = ?').get(value) as { id: string } | undefined;
+  if (taken && taken.id !== appId) throw badRequest('Another app already uses that address.');
+  return value;
+}
+
 function uniqueSlug(): string {
   for (let i = 0; i < 20; i++) {
     const slug = generateSlug();
@@ -98,6 +114,7 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     const name = validName(body.name);
     const port = validPort(body.port ?? 80);
     const sourceType = body.sourceType === 'compose' ? 'compose' : 'image';
+    const slug = String(body.slug ?? '').trim() ? validSlug(body.slug) : null;
 
     let composeText: string;
     let primaryService: string;
@@ -117,7 +134,7 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     const row: AppRow = {
       id: randomId(10),
       name,
-      slug: uniqueSlug(),
+      slug: slug ?? uniqueSlug(),
       source_type: sourceType,
       compose: composeText,
       primary_service: primaryService,
@@ -151,14 +168,15 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const name = body.name !== undefined ? validName(body.name) : row.name;
     const port = body.port !== undefined ? validPort(body.port) : row.port;
+    const slug = body.slug !== undefined ? validSlug(body.slug, row.id) : row.slug;
     const composeText = body.compose !== undefined ? String(body.compose) : row.compose;
     const primaryService =
       body.primaryService !== undefined ? String(body.primaryService).trim() : row.primary_service;
 
     validateCompose(parseCompose(composeText), primaryService);
     db.prepare(
-      'UPDATE apps SET name = ?, port = ?, compose = ?, primary_service = ?, updated_at = ? WHERE id = ?',
-    ).run(name, port, composeText, primaryService, Date.now(), row.id);
+      'UPDATE apps SET name = ?, slug = ?, port = ?, compose = ?, primary_service = ?, updated_at = ? WHERE id = ?',
+    ).run(name, slug, port, composeText, primaryService, Date.now(), row.id);
     return toDto(getApp(row.id));
   });
 

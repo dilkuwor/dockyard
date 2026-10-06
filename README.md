@@ -70,7 +70,9 @@ Add a WAF skip rule for the `/api/hooks/` path if deploys get blocked.
 ## Deploying an app
 
 1. **New app** → choose a single image (e.g. `nginx:alpine`, port 80) or paste a
-   compose file. Dockyard deploys it and gives it a random subdomain.
+   compose file. Dockyard deploys it at the address you pick, or a random subdomain
+   if you leave it blank. You can change the address later under **Settings**; it
+   takes effect on the next deploy.
 2. Open **Deploy hook** on the app, add the four secrets to your GitHub repo, and
    commit the workflow it shows (also in [`examples/deploy.yml`](examples/deploy.yml)).
 3. Every push to `main` builds, pushes and deploys that exact image digest.
@@ -84,6 +86,13 @@ Apps share one machine, so Dockyard rejects anything that reaches outside the ap
 networks/volumes, and `traefik.*` labels. Use images, named volumes, and the
 Environment tab instead. The service that gets the URL is joined to the shared
 `dockyard_edge` network; other services stay on the app's private network.
+
+### Cleaning up old images
+
+Every deploy pulls an image, and old ones stay on disk. The **Images** page lists
+the images Dockyard pulled that no container uses any more and removes them on
+request. It only ever touches images Dockyard pulled itself, so other projects on
+the same machine are safe. A later rollback simply pulls the image again.
 
 ### Deploy hook format
 
@@ -116,9 +125,10 @@ server/src/
   index.ts        Fastify setup, static dashboard, startup checks
   compose.ts      Validates user compose files and renders the routed version
   deployer.ts     Per-app deploy queue: render → pull → up --wait
+  images.ts       Tracks pulled images and prunes the unused ones
   docker.ts       docker / docker compose CLI wrapper
-  routes/         auth, apps, hooks
+  routes/         auth, apps, hooks, images
 web/src/
-  pages/          Apps list, New app, App detail with tabs
+  pages/          Apps list, New app, App detail with tabs, Images
   components/     Shared UI
 ```

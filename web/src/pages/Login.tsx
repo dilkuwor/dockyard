@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { api } from '../api'
-import { Button, ErrorNote, Field, TextInput } from '../components/ui'
+import { Button, ErrorNote, Field, Logo, TextInput } from '../components/ui'
 
 export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
   const [password, setPassword] = useState('')
@@ -23,9 +23,10 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
 
   return (
     <div className="grid min-h-screen place-items-center px-5">
-      <form onSubmit={submit} className="w-full max-w-sm border-t-4 border-ink bg-panel p-7">
-        <h1 className="font-display text-5xl leading-none font-bold">Dockyard</h1>
-        <p className="mt-2 mb-7 text-ink-soft">Sign in to manage your apps.</p>
+      <form onSubmit={submit} className="w-full max-w-sm rounded-xl border border-rule bg-panel p-8 shadow-sm">
+        <Logo className="size-9" />
+        <h1 className="mt-5 text-xl font-semibold tracking-tight">Sign in to Dockyard</h1>
+        <p className="mt-1 mb-6 text-ink-soft">Enter the admin password to manage your apps.</p>
         <div className="space-y-4">
           <Field label="Admin password">
             <TextInput type="password" autoFocus autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />

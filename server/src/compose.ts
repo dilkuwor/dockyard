@@ -13,7 +13,8 @@ const HOST_VALUES = new Set(['host']);
 export function parseCompose(text: string): ComposeDoc {
   let doc: unknown;
   try {
-    doc = YAML.parse(text);
+    // Resolve "<<" merge keys like docker compose does, so merged-in settings are validated too.
+    doc = YAML.parse(text, { merge: true });
   } catch (err) {
     throw badRequest(`Compose file is not valid YAML: ${(err as Error).message}`);
   }
@@ -95,6 +96,9 @@ export function validateCompose(doc: ComposeDoc, primaryService: string): void {
     if (svc.env_file) p('"env_file" is not supported. Set environment variables in Dockyard instead.');
     if (svc.extends) p('"extends" is not supported.');
     if (svc.volumes_from) p('"volumes_from" is not allowed.');
+
+    const networks = Array.isArray(svc.networks) ? svc.networks : Object.keys(svc.networks ?? {});
+    if (networks.includes(EDGE_KEY)) p(`network "${EDGE_KEY}" is reserved; Dockyard attaches the routed service to it.`);
 
     const labels = labelsToMap(svc.labels);
     const reserved = Object.keys(labels).filter((k) => RESERVED_LABEL.test(k));

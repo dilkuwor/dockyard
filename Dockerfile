@@ -35,5 +35,6 @@ COPY --from=web /web/dist ./public
 
 VOLUME /data
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s CMD curl -fsS http://127.0.0.1:3000/api/health || exit 1
+# Traefik won't route to the container until the first check passes, so probe quickly during startup.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s CMD curl -fsS http://127.0.0.1:3000/api/health || exit 1
 CMD ["node", "dist/index.js"]

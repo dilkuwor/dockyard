@@ -41,6 +41,12 @@ CREATE TABLE IF NOT EXISTS deployments (
 );
 
 CREATE INDEX IF NOT EXISTS deployments_app_idx ON deployments(app_id, created_at DESC);
+
+-- Local images Dockyard pulled; pruning only ever considers these.
+CREATE TABLE IF NOT EXISTS images (
+  id TEXT PRIMARY KEY,
+  ref TEXT NOT NULL
+);
 `);
 
 export interface AppRow {

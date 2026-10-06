@@ -4,24 +4,37 @@ import { cx } from '../lib'
 
 type Variant = 'primary' | 'secondary' | 'quiet' | 'danger'
 
+export function Logo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={cx('size-7 shrink-0', className)}>
+      <rect width="24" height="24" rx="6" fill="#0f172a" />
+      <rect x="5" y="6.5" width="14" height="3" rx="1" fill="#fff" />
+      <rect x="5" y="10.5" width="9" height="3" rx="1" fill="#fff" opacity=".7" />
+      <rect x="5" y="14.5" width="14" height="3" rx="1" fill="#fff" opacity=".45" />
+    </svg>
+  )
+}
+
 export function Button({
   variant = 'secondary',
+  size = 'md',
   busy,
   className,
   children,
   disabled,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; busy?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'md' | 'sm'; busy?: boolean }) {
   return (
     <button
       {...rest}
       disabled={disabled || busy}
       className={cx(
-        'inline-flex items-center justify-center gap-2 rounded-[3px] px-3.5 py-2 text-[15px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-55',
-        variant === 'primary' && 'bg-signal text-ink hover:bg-signal-deep hover:text-white',
-        variant === 'secondary' && 'border border-ink/25 bg-panel text-ink hover:border-ink/60',
-        variant === 'quiet' && 'text-ink-soft hover:text-ink hover:bg-ink/5',
-        variant === 'danger' && 'bg-port text-white hover:bg-port/85',
+        'inline-flex items-center justify-center gap-2 rounded-md font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        size === 'md' ? 'h-9 px-3.5 text-sm' : 'h-8 px-2.5 text-[13px]',
+        variant === 'primary' && 'bg-ink text-white shadow-xs hover:bg-ink/85',
+        variant === 'secondary' && 'border border-rule bg-panel text-ink shadow-xs hover:bg-paper',
+        variant === 'quiet' && 'text-ink-soft hover:bg-ink/5 hover:text-ink',
+        variant === 'danger' && 'bg-port text-white shadow-xs hover:bg-port/90',
         className,
       )}
     >
@@ -30,18 +43,22 @@ export function Button({
   )
 }
 
+export function Card({ className, children }: { className?: string; children: ReactNode }) {
+  return <div className={cx('rounded-lg border border-rule bg-panel shadow-xs', className)}>{children}</div>
+}
+
 export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[15px] font-semibold">{label}</span>
+      <span className="mb-1.5 block text-sm font-medium">{label}</span>
       {children}
-      {hint && <span className="mt-1.5 block text-sm text-ink-soft">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-[13px] text-ink-soft">{hint}</span>}
     </label>
   )
 }
 
 const inputBase =
-  'w-full rounded-[3px] border border-rule bg-white px-3 py-2 text-[15px] text-ink placeholder:text-ink-soft/60 focus:border-ink focus:outline-none'
+  'w-full rounded-md border border-rule bg-white px-3 py-2 text-sm text-ink shadow-xs placeholder:text-ink-soft/60 focus:border-accent focus:ring-3 focus:ring-accent/15 focus:outline-none'
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cx(inputBase, props.className)} />
@@ -56,8 +73,8 @@ export function ErrorNote({ error }: { error: unknown }) {
   const message = error instanceof Error ? error.message : String(error)
   const details = error instanceof ApiError ? error.details : undefined
   return (
-    <div role="alert" className="border-l-4 border-port bg-port/8 px-4 py-3 text-[15px]">
-      <p className="font-semibold text-port">{message}</p>
+    <div role="alert" className="rounded-md border border-port/25 bg-port/5 px-4 py-3 text-sm">
+      <p className="font-medium text-port">{message}</p>
       {details && details.length > 0 && (
         <ul className="mt-2 list-disc space-y-1 pl-5 text-ink">
           {details.map((d) => (
@@ -69,34 +86,49 @@ export function ErrorNote({ error }: { error: unknown }) {
   )
 }
 
-const appStates: Record<AppState | 'deploying', { label: string; tone: string; shape: string }> = {
-  running: { label: 'Running', tone: 'text-starboard', shape: 'bg-starboard' },
-  partial: { label: 'Partly running', tone: 'text-signal-deep', shape: 'bg-signal' },
-  stopped: { label: 'Stopped', tone: 'text-ink-soft', shape: 'border-2 border-ink-soft' },
-  missing: { label: 'Not running', tone: 'text-ink-soft', shape: 'border-2 border-dashed border-ink-soft' },
-  deploying: { label: 'Deploying', tone: 'text-signal-deep', shape: 'bg-signal animate-pulse' },
+type Tone = 'ok' | 'warn' | 'danger' | 'accent' | 'neutral'
+
+const tones: Record<Tone, { badge: string; dot: string }> = {
+  ok: { badge: 'bg-starboard/10 text-starboard', dot: 'bg-starboard' },
+  warn: { badge: 'bg-warn/10 text-warn', dot: 'bg-warn' },
+  danger: { badge: 'bg-port/10 text-port', dot: 'bg-port' },
+  accent: { badge: 'bg-accent/10 text-accent-deep', dot: 'bg-accent' },
+  neutral: { badge: 'bg-ink/5 text-ink-soft', dot: 'bg-ink-soft/60' },
 }
 
-export function AppStatus({ state }: { state: AppState | 'deploying' }) {
-  const s = appStates[state]
+function Badge({ tone, pulse, children }: { tone: Tone; pulse?: boolean; children: ReactNode }) {
+  const t = tones[tone]
   return (
-    <span className={cx('inline-flex items-center gap-2 text-[15px] font-semibold', s.tone)}>
-      <span aria-hidden className={cx('size-2.5 shrink-0', s.shape)} />
-      {s.label}
+    <span className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap', t.badge)}>
+      <span aria-hidden className={cx('size-1.5 shrink-0 rounded-full', t.dot, pulse && 'animate-pulse')} />
+      {children}
     </span>
   )
 }
 
-const deployStates: Record<DeploymentStatus, { label: string; tone: string }> = {
-  queued: { label: 'Queued', tone: 'text-ink-soft' },
-  running: { label: 'In progress', tone: 'text-signal-deep' },
-  succeeded: { label: 'Live', tone: 'text-starboard' },
-  failed: { label: 'Failed', tone: 'text-port' },
+const appStates: Record<AppState | 'deploying', { label: string; tone: Tone }> = {
+  running: { label: 'Running', tone: 'ok' },
+  partial: { label: 'Partly running', tone: 'warn' },
+  stopped: { label: 'Stopped', tone: 'neutral' },
+  missing: { label: 'Not running', tone: 'neutral' },
+  deploying: { label: 'Deploying', tone: 'accent' },
+}
+
+export function AppStatus({ state }: { state: AppState | 'deploying' }) {
+  const s = appStates[state]
+  return <Badge tone={s.tone} pulse={state === 'deploying'}>{s.label}</Badge>
+}
+
+const deployStates: Record<DeploymentStatus, { label: string; tone: Tone }> = {
+  queued: { label: 'Queued', tone: 'neutral' },
+  running: { label: 'In progress', tone: 'accent' },
+  succeeded: { label: 'Live', tone: 'ok' },
+  failed: { label: 'Failed', tone: 'danger' },
 }
 
 export function DeployStatus({ status, superseded }: { status: DeploymentStatus; superseded?: boolean }) {
-  const s = superseded ? { label: 'Succeeded', tone: 'text-ink-soft' } : deployStates[status]
-  return <span className={cx('font-semibold', s.tone)}>{s.label}</span>
+  const s = superseded ? { label: 'Succeeded', tone: 'neutral' as Tone } : deployStates[status]
+  return <Badge tone={s.tone} pulse={status === 'running'}>{s.label}</Badge>
 }
 
 export function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
@@ -104,8 +136,7 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
   return (
     <Button
       type="button"
-      variant="secondary"
-      className="px-2.5 py-1 text-sm"
+      size="sm"
       onClick={async () => {
         await navigator.clipboard.writeText(value)
         setCopied(true)
@@ -119,9 +150,9 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
 
 export function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="border-t border-rule pt-5">
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-2xl font-bold">{title}</h2>
+    <section>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">{title}</h2>
         {aside}
       </div>
       {children}

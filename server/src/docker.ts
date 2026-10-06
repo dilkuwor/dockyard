@@ -149,6 +149,39 @@ export async function projectStates(): Promise<Map<string, ProjectState>> {
   return states;
 }
 
+export interface ImageInfo {
+  id: string;
+  tags: string[];
+  size: number;
+}
+
+/** Looks up local images by reference or ID. Ones that don't exist are left out. */
+export async function inspectImages(refs: string[]): Promise<ImageInfo[]> {
+  if (!refs.length) return [];
+  // Exits non-zero when any image is missing, but still prints the ones it found.
+  const res = await run(['image', 'inspect', '--format', '{"id":{{json .Id}},"tags":{{json .RepoTags}},"size":{{.Size}}}', ...refs]);
+  return parseJsonOutput(res.stdout).map((i) => ({ id: i.id, tags: i.tags ?? [], size: i.size }));
+}
+
+/** IDs of the images every container (running or stopped) was created from, or null if Docker can't say. */
+export async function imagesInUse(): Promise<Set<string> | null> {
+  const ps = await run(['ps', '-aq', '--no-trunc']);
+  if (ps.code !== 0) return null;
+  const ids = ps.stdout.split('\n').filter(Boolean);
+  if (!ids.length) return new Set();
+  const res = await run(['inspect', '--format', '{{.Image}}', ...ids]);
+  if (res.code !== 0) return null;
+  return new Set(res.stdout.split('\n').filter(Boolean));
+}
+
+/** Never forced, so Docker itself refuses if a container still uses the image. */
+export async function removeImage(image: ImageInfo): Promise<boolean> {
+  for (const tag of image.tags) await run(['image', 'rm', tag]);
+  const res = await run(['image', 'rm', image.id]);
+  // Removing the last tag already deletes the image, so "not found" here is success.
+  return res.code === 0 || (await inspectImages([image.id])).length === 0;
+}
+
 export async function ensureEdgeNetwork(): Promise<void> {
   const inspect = await run(['network', 'inspect', config.edgeNetwork]);
   if (inspect.code === 0) return;

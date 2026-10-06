@@ -29,6 +29,18 @@ export function shortImage(image: string | null): string {
   return at === -1 ? image : `${image.slice(0, at)}@${image.slice(at + 8, at + 15)}`
 }
 
+export function formatBytes(bytes: number): string {
+  if (bytes < 1000) return `${bytes} B`
+  const units = ['kB', 'MB', 'GB', 'TB']
+  let value = bytes
+  let unit = -1
+  do {
+    value /= 1000
+    unit += 1
+  } while (value >= 1000 && unit < units.length - 1)
+  return `${value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`
+}
+
 export function useResource<T>(load: () => Promise<T>, deps: unknown[], pollMs?: number | false) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<Error | null>(null)

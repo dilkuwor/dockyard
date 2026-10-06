@@ -1,21 +1,42 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router'
-import { Button } from './ui'
+import { Link, useLocation } from 'react-router'
+import { cx } from '../lib'
+import { Button, Logo } from './ui'
 
 export default function Layout({ children, onSignOut }: { children: ReactNode; onSignOut: () => void }) {
+  const { pathname } = useLocation()
+  const sections = [
+    { to: '/', label: 'Apps', active: pathname === '/' || pathname.startsWith('/apps') },
+    { to: '/images', label: 'Images', active: pathname.startsWith('/images') },
+  ]
+
   return (
     <div className="min-h-screen">
-      <header className="border-b-2 border-ink bg-panel">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3">
-          <Link to="/" className="font-display text-[28px] leading-none font-bold tracking-tight">
-            Dockyard
+      <header className="sticky top-0 z-10 border-b border-rule bg-panel/90 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-5">
+          <Link to="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
+            <Logo />
+            <span className="hidden sm:inline">Dockyard</span>
           </Link>
-          <nav className="flex items-center gap-1">
-            <Link to="/apps/new">
-              <Button variant="primary" tabIndex={-1}>New app</Button>
-            </Link>
-            <Button variant="quiet" onClick={onSignOut}>Sign out</Button>
+          <nav className="mr-auto ml-2 flex items-center gap-0.5 sm:ml-5" aria-label="Sections">
+            {sections.map((s) => (
+              <Link
+                key={s.to}
+                to={s.to}
+                aria-current={s.active ? 'page' : undefined}
+                className={cx(
+                  'rounded-md px-2.5 py-1.5 font-medium transition-colors',
+                  s.active ? 'bg-ink/5 text-ink' : 'text-ink-soft hover:text-ink',
+                )}
+              >
+                {s.label}
+              </Link>
+            ))}
           </nav>
+          <Link to="/apps/new">
+            <Button variant="primary" tabIndex={-1}>New app</Button>
+          </Link>
+          <Button variant="quiet" onClick={onSignOut}>Sign out</Button>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>

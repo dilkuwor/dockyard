@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import AppsPage from './pages/Apps'
 import NewAppPage from './pages/NewApp'
 import AppDetailPage from './pages/AppDetail'
+import ImagesPage from './pages/Images'
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null)
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/" element={<AppsPage />} />
         <Route path="/apps/new" element={<NewAppPage />} />
         <Route path="/apps/:id/:tab?" element={<AppDetailPage />} />
+        <Route path="/images" element={<ImagesPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

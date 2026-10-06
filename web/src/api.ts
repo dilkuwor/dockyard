@@ -56,6 +56,12 @@ export interface EnvVar {
   value: string
 }
 
+export interface UnusedImage {
+  id: string
+  name: string
+  size: number
+}
+
 export class ApiError extends Error {
   status: number
   details?: string[]
@@ -95,13 +101,14 @@ export const api = {
   getApp: (id: string) => request<AppDetail>('GET', `/api/apps/${id}`),
   createApp: (body: {
     name: string
+    slug?: string
     sourceType: 'image' | 'compose'
     image?: string
     compose?: string
     primaryService?: string
     port: number
   }) => request<AppSummary>('POST', '/api/apps', body),
-  updateApp: (id: string, body: Partial<{ name: string; port: number; compose: string; primaryService: string }>) =>
+  updateApp: (id: string, body: Partial<{ name: string; slug: string; port: number; compose: string; primaryService: string }>) =>
     request<AppSummary>('PATCH', `/api/apps/${id}`, body),
   deleteApp: (id: string, removeVolumes: boolean) =>
     request<{ ok: true }>('DELETE', `/api/apps/${id}?volumes=${removeVolumes}`),
@@ -120,4 +127,7 @@ export const api = {
   rotateHook: (id: string) => request<{ url: string; secret: string }>('POST', `/api/apps/${id}/hook/rotate`),
 
   stats: (id: string) => request<ContainerStats[]>('GET', `/api/apps/${id}/stats`),
+
+  unusedImages: () => request<{ images: UnusedImage[]; totalBytes: number }>('GET', '/api/images/unused'),
+  pruneImages: () => request<{ removed: number; failed: number; bytes: number }>('POST', '/api/images/prune'),
 }

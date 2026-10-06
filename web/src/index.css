@@ -1,25 +1,20 @@
 @import "tailwindcss";
-@import "@fontsource/barlow/400.css";
-@import "@fontsource/barlow/500.css";
-@import "@fontsource/barlow/600.css";
-@import "@fontsource/barlow-condensed/500.css";
-@import "@fontsource/barlow-condensed/700.css";
 
 @theme {
-  --color-paper: #edf1f3;
-  --color-panel: #f8fafb;
-  --color-ink: #142b3b;
-  --color-ink-soft: #566a79;
-  --color-rule: #c9d3da;
-  --color-signal: #e8a317;
-  --color-signal-deep: #b97f0b;
-  --color-starboard: #1e7b4e;
-  --color-port: #b3261e;
-  --color-console: #0f1f2b;
-  --color-console-text: #cfe0ea;
+  --color-paper: #f6f7f9;
+  --color-panel: #ffffff;
+  --color-ink: #0f172a;
+  --color-ink-soft: #5f6b7a;
+  --color-rule: #e2e6ec;
+  --color-accent: #2563eb;
+  --color-accent-deep: #1d4ed8;
+  --color-starboard: #15803d;
+  --color-port: #c2332b;
+  --color-warn: #b45309;
+  --color-console: #0d1522;
+  --color-console-text: #d3dbe8;
 
-  --font-sans: "Barlow", system-ui, sans-serif;
-  --font-display: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
@@ -31,12 +26,16 @@
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
   }
+  body {
+    font-size: 0.875rem;
+    line-height: 1.55;
+  }
   :focus-visible {
-    outline: 2px solid var(--color-signal-deep);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
   ::selection {
-    background: color-mix(in srgb, var(--color-signal) 40%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
   }
 }
 
