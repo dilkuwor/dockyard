@@ -1,147 +1,218 @@
 # Dockyard
 
 A small self-hosted cloud for one Docker machine. Deploy an image or a compose
-file, get a live HTTPS URL on your domain, and redeploy automatically when
-GitHub Actions pushes a new image.
+file and get an address for it: a local one out of the box, or a public HTTPS
+address on your own domain once you connect Cloudflare. Push to GitHub and the
+new version deploys itself.
 
 ```
-GitHub Actions ── push ──▶ Docker Hub
+GitHub Actions ── build & push ──▶ ghcr.io / Docker Hub
       │
-      └── signed POST /api/hooks/<app> ──▶ Cloudflare ──▶ cloudflared ──▶ Traefik ──▶ Dockyard
-                                                                            │            │
-                       visitor ── quiet-tide-4k2p.bytetech.cloud ──▶ ───────┘            ▼
-                                                                   app containers ◀── docker compose up
+      └── signed POST /api/hooks ──▶ Cloudflare ──▶ cloudflared ──▶ Traefik ──▶ Dockyard
+                                                                      │            │
+                  visitor ── my-app.example.com ──▶ ──────────────────┘            ▼
+                                                             app containers ◀── docker compose up
 ```
 
-## What's in the box
+## What it does
 
-| Service        | Job                                                                 |
-| -------------- | ------------------------------------------------------------------- |
-| `cloudflared`  | Optional. Outbound tunnel to Cloudflare, started by Dockyard when you turn on public access. |
-| `traefik`      | Routes each hostname to the right container using Docker labels.    |
-| `socket-proxy` | Read-only Docker API for Traefik.                                   |
-| `dockyard`     | API, dashboard and deploy hooks (Node/TypeScript + React).          |
+- Runs single images or multi-service compose files, each at its own address.
+- Local addresses with no setup; public HTTPS through a Cloudflare tunnel, set up
+  for you from the dashboard. No router ports are opened.
+- Deploys on every push through a signed hook, pinned to the exact image digest.
+- One-click rollback, encrypted environment variables, live logs, CPU and memory.
+- Pulls private images from Docker Hub, ghcr.io or any other registry.
+- Access tokens and a `dockyard` command, so scripts and AI agents can deploy.
+- Cleans up old images, and only the ones it pulled itself.
 
-## Setup
+| Service        | Job                                                                |
+| -------------- | ------------------------------------------------------------------ |
+| `dockyard`     | API, dashboard and deploy hooks (Node/TypeScript + React).         |
+| `traefik`      | Routes each address to the right container.                        |
+| `socket-proxy` | Gives Traefik read-only access to Docker.                          |
+| `cloudflared`  | Optional tunnel to Cloudflare. Dockyard starts it when you turn on public access. |
 
-### 1. Configure and start
+## Quick start
+
+You need Docker with the compose plugin.
 
 ```bash
 cp .env.example .env
-openssl rand -hex 32   # paste into DOCKYARD_SECRET
-# choose an ADMIN_PASSWORD
+openssl rand -hex 32          # paste into DOCKYARD_SECRET
+# set ADMIN_PASSWORD in .env
 docker compose up -d --build
 ```
 
-Open `http://dockyard.localhost:8080` on the machine itself (or `http://localhost:3000`)
-and sign in with `ADMIN_PASSWORD`. On a remote server, reach it through an SSH tunnel:
+Open `http://dockyard.localhost:8080` on the machine itself and sign in with
+`ADMIN_PASSWORD`. For a remote server, forward the port first:
 `ssh -L 8080:localhost:8080 you@server`.
 
-### 2. Choose how apps are reachable
-
-The first sign-in asks one question, and you can change the answer later under
-**Settings → Public access**:
+The first sign-in asks how apps should be reachable:
 
 - **On this machine only.** Nothing to set up. Apps are served at
-  `http://<name>.localhost:8080`. (Chrome, Firefox and curl resolve `*.localhost`
-  by themselves.)
-- **On the internet, with your own domain.** Uses a Cloudflare tunnel, so no router
-  ports are opened. Paste a Cloudflare API token and Dockyard does the rest: it creates
-  the tunnel, routes `*.yourdomain` to it, adds the wildcard DNS record, adds a WAF rule
-  so deploy hooks get past Super Bot Fight Mode, and starts the connector. The token is
-  used once and not stored. Apps are then served at `https://<name>.yourdomain`.
+  `http://<name>.localhost:8080`. Chrome, Firefox and curl resolve `*.localhost`
+  by themselves; Safari may not.
+- **On the internet, with your own domain.** See the next section.
 
-The API token needs: Account · Cloudflare Tunnel · Edit; Zone · Zone · Read;
-Zone · DNS · Edit; Zone · Zone WAF · Edit; and optionally Zone · Bot Management · Edit.
-The domain must already be on Cloudflare.
+You can change the answer at any time on the Platform Settings page
+(**Registry Auth** in the sidebar), under **Public access**.
+
+## Public access with Cloudflare
+
+Your domain must already be on Cloudflare. Then, on the first-run screen or under
+**Public access**:
+
+1. Create a Cloudflare API token at
+   [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
+   (Create Custom Token) with these permissions:
+   - Account · Cloudflare Tunnel · Edit
+   - Zone · Zone · Read
+   - Zone · DNS · Edit
+   - Zone · Zone WAF · Edit
+   - Zone · Bot Management · Edit (optional)
+2. Paste it, pick the domain, and start the setup.
+
+Dockyard then creates the tunnel, routes `*.yourdomain` to it, adds the wildcard
+DNS record, adds a WAF rule so deploy hooks get past Super Bot Fight Mode, starts
+the connector, and checks that the public address answers. Each step is reported.
+The API token is used once and is not stored.
+
+Apps are then served at `https://<name>.yourdomain` and the dashboard at
+`https://dockyard.yourdomain`. The local addresses keep working.
 
 Good to know:
 
-- Turning public access off or on needs no redeploys. Apps are routed by the first part
-  of their address, so each one answers on the local address and on your domain.
-- Cloudflare's free certificate covers one wildcard level, so `abc.example.com` works
-  but `abc.apps.example.com` would not.
-- On Cloudflare's free plan, **Bot Fight Mode** can block GitHub from calling deploy
-  hooks and cannot be skipped for one address. Setup reports whether it is on and can
-  turn it off for you. On paid plans the skip rule for Super Bot Fight Mode is enough.
-- Prefer to do the Cloudflare side yourself? Choose "I already have a tunnel" and enter
-  your domain and tunnel token. The tunnel needs a published application route
-  `*.yourdomain` → `HTTP` → `traefik:80` and a proxied `CNAME` `*` →
-  `<tunnel-id>.cfargotunnel.com`.
-- Upgrading from a version that kept `BASE_DOMAIN` and `CLOUDFLARE_TUNNEL_TOKEN` in
-  `.env`: they are imported into the dashboard's settings on first start and can then be
-  removed from `.env`. Run `docker compose up -d --build --remove-orphans` once to retire
-  the old `cloudflared` service; Dockyard now runs the connector itself.
+- **No redeploys.** Apps are routed by the first part of their address, so turning
+  public access on or off takes effect at once.
+- **Turning it off** stops the connector and switches addresses back to local ones.
+  The settings are kept, so it can be switched back on without Cloudflare. The
+  tunnel and DNS record stay in your Cloudflare account.
+- **One subdomain level.** Cloudflare's free certificate covers `abc.example.com`
+  but not `abc.apps.example.com`.
+- **Bot Fight Mode (free plan)** can block GitHub from calling deploy hooks and
+  cannot be skipped for one address. Setup tells you whether it is on and can turn
+  it off for the domain. On paid plans the Super Bot Fight Mode skip rule is enough.
+- **Existing DNS records.** If the domain already has a wildcard or a `dockyard`
+  record pointing elsewhere, setup stops and says so. Tick "Replace existing DNS
+  records" to let it take them over.
+- **Doing the Cloudflare side yourself.** Choose "I already have a tunnel" and
+  enter your domain and tunnel token. The tunnel needs a published application
+  route `*.yourdomain` → `HTTP` → `traefik:80`, and the domain a proxied `CNAME`
+  `*` → `<tunnel-id>.cfargotunnel.com`.
 
-### 3. Lock down the dashboard (recommended with public access)
+### Lock down the dashboard
 
-Dockyard can run anything on this machine, so put Cloudflare Access in front of it:
+Dockyard can run anything on its machine, so once it is public, put Cloudflare
+Access in front of it:
 
 1. **Zero Trust → Access → Applications → Add** a self-hosted app for
-   `dockyard.yourdomain` with a policy allowing only your email.
-2. Add a second application for `dockyard.yourdomain/api/hooks` with a
-   **Bypass** policy for Everyone, so GitHub can reach the deploy hooks. Hooks are
-   protected by their own HMAC signatures.
+   `dockyard.yourdomain` with a policy that allows only your email.
+2. Add a second application for `dockyard.yourdomain/api/hooks` with a **Bypass**
+   policy for Everyone, so GitHub can still reach the deploy hooks. Hooks are
+   protected by their own signatures.
 
-## Deploying an app
+## Deploying apps
 
-1. **New app** → choose a single image (e.g. `nginx:alpine`, port 80) or paste a
-   compose file. Dockyard deploys it at the address you pick, or a random subdomain
-   if you leave it blank. You can change the address later under **Settings**; it
-   takes effect on the next deploy.
-2. Open **Deploy hook** on the app, pick GitHub Container Registry or Docker Hub, add
-   the secrets it lists to your GitHub repo, and commit the workflow it shows (also in
-   [`examples/deploy-ghcr.yml`](examples/deploy-ghcr.yml) and [`examples/deploy.yml`](examples/deploy.yml)).
-   For private images, add the registry's credentials under **Settings → Registry
-   credentials** so Dockyard can pull them. Docker Hub, ghcr.io and any other registry
-   are supported; credentials are verified when saved and stored encrypted. (The
-   `GHCR_*` and `DOCKERHUB_*` variables in `.env` still work as a fallback.)
-3. Every push to `main` builds, pushes and deploys that exact image digest.
-   Roll back from **Deployments** any time.
+### From the dashboard
 
-### Deploying with an AI agent
+**New Application** → choose a single image (for example `nginx:alpine`, port 80)
+or paste a compose file. Pick an address or leave it blank for a random one. You
+can change the address later on the app's **Settings** tab; it takes effect on the
+next deploy.
 
-An agent such as Claude Code can take a project folder and put it live without
-you touching the dashboard:
+Each app has tabs for **Deployments** (history, logs, roll back), **Environment**
+(variables, encrypted at rest), **Logs** (live), **Deploy hook** and **Settings**.
 
-1. On the **Agents** page, create an access token. Agents sign in with it instead
-   of the admin password, and you can revoke it at any time.
-2. Run the setup commands shown on that page on the machine where the agent works
-   (the dashboard's **Help** page walks through the install step by step).
-   They save the server address and token to `~/.config/dockyard/config` and install
-   the `dockyard` command. The machine also needs `git` and `jq`.
-3. Choose how workflows authenticate to Dockyard:
-   - **Global deploy hook** (turn it on from the Agents page): one signing secret for
-     every app. Add it to each new GitHub repository as the Actions secret
-     `DOCKYARD_HOOK_SECRET`. Dockyard picks the app from the image name, so the secret
-     can move an app to another build of its own image but not to a foreign one.
-   - **Per-app hooks** (the default): each app has its own secret, and `dockyard deploy`
-     stores it in the repository for you, which needs the GitHub CLI (`gh auth login`).
-4. In an app's folder, tell the agent: *Deploy this app to Dockyard. Run
-   `dockyard guide` first and follow it.*
+### On every push to GitHub
 
-`dockyard guide` prints this server's deployment guide. `dockyard deploy --port 3000`
-registers the app, adds a workflow that builds the image and pushes it to ghcr.io,
-pushes the branch, and waits until the app is live. `dockyard status`, `env`, `redeploy` and `logs` cover the rest. You can
-run the same commands yourself.
+This needs public access, because GitHub has to reach Dockyard.
+
+1. Open the app's **Deploy hook** tab and pick GitHub Container Registry or Docker
+   Hub.
+2. Add the secrets it lists to your GitHub repository and commit the workflow it
+   shows. The same workflows are in [`examples/deploy-ghcr.yml`](examples/deploy-ghcr.yml)
+   and [`examples/deploy.yml`](examples/deploy.yml).
+3. Push to `main`. GitHub builds and pushes the image, then calls the hook, and
+   Dockyard deploys that exact image digest.
+
+To use one signing secret for all apps instead of one per app, turn on the
+**Global deploy hook** on the **Agent Access & CI** page and add it to each
+repository as the Actions secret `DOCKYARD_HOOK_SECRET`. Dockyard picks the app
+from the image name, so the secret can move an app to another build of its own
+image but not to a foreign one.
+
+### With the `dockyard` command or an AI agent
+
+The `dockyard` command sets up the GitHub flow for a project in one step, and an
+agent such as Claude Code can run it for you.
+
+1. On the **Agent Access & CI** page, create an access token. It is used instead of
+   the admin password and can be revoked at any time.
+2. Install the command on the machine where you or the agent work. The **CLI &
+   Docs** page has the commands, with this server's address filled in. It needs
+   `git`, `curl` and `jq`.
+3. In an app's folder, run `dockyard deploy --port 3000`, or tell the agent:
+   *Deploy this app to Dockyard. Run `dockyard guide` first and follow it.*
+
+`dockyard deploy` registers the app, adds a workflow that builds the image and
+pushes it to ghcr.io, pushes the branch, and waits until the app is live.
+`dockyard status`, `env`, `redeploy` and `logs` cover the rest, and
+`dockyard guide` prints this server's deployment guide for agents.
+
+With the global deploy hook on, you add `DOCKYARD_HOOK_SECRET` to the repository
+yourself. With it off, the command stores each app's own secret for you, which
+needs the GitHub CLI (`gh auth login`).
+
+### Private images
+
+Add the registry's credentials on the Platform Settings page, under registry
+credentials. Docker Hub, ghcr.io and any other registry are supported. Credentials
+are checked when you save them and stored encrypted. Packages on ghcr.io are
+private by default, so the GitHub flow usually needs this.
 
 ### Compose rules
 
 Apps share one machine, so Dockyard rejects anything that reaches outside the app:
-`build`, `ports`, `privileged`, `network_mode`, host `pid`/`ipc`, `cap_add`,
-`devices`, bind mounts, `env_file`, `container_name`, external or named
-networks/volumes, and `traefik.*` labels. Use images, named volumes, and the
-Environment tab instead. The service that gets the URL is joined to the shared
-`dockyard_edge` network; other services stay on the app's private network.
+
+- `build`, `ports`, `privileged`, `network_mode`, `container_name`, `env_file`,
+  `extends`, `volumes_from`, `include`
+- host `pid`, `ipc`, `uts`, `userns_mode` or `cgroup`
+- `cap_add`, `devices`, `security_opt`, `sysctls`
+- bind mounts, and external or custom-named networks and volumes
+- secrets and configs read from files
+- `traefik.*` and `dockyard.*` labels, and the `dockyard_edge` network
+
+Use images, named volumes and the Environment tab instead. The service that gets
+the address is joined to the shared `dockyard_edge` network; other services stay
+on the app's private network.
 
 ### Cleaning up old images
 
-Every deploy pulls an image, and old ones stay on disk. The **Images** page lists
-the images Dockyard pulled that no container uses any more and removes them on
-request. It only ever touches images Dockyard pulled itself, so other projects on
-the same machine are safe. A later rollback simply pulls the image again.
+Every deploy pulls an image, and old ones stay on disk. The **Images & Storage**
+page lists the images Dockyard pulled that no container uses any more and removes
+them on request. It never touches images from anything else on the machine. A
+later rollback simply pulls the image again.
 
-### Deploy hook format
+## Configuration
+
+Everything else is set from the dashboard. `.env` holds only:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ADMIN_PASSWORD` | required | Dashboard password. Treat it like root on this machine. |
+| `DOCKYARD_SECRET` | required | At least 32 characters. Encrypts stored secrets and signs sessions. |
+| `LOCAL_PORT` | `8080` | Port for the local addresses. |
+| `LOCAL_BIND` | `127.0.0.1` | Set to `0.0.0.0` to offer the local addresses to your network. |
+| `DASHBOARD_SUBDOMAIN` | `dockyard` | First part of the dashboard's address. |
+| `DEPLOY_WAIT_TIMEOUT` | `120` | Seconds to wait for containers to become healthy on deploy. |
+| `GHCR_USERNAME`, `GHCR_TOKEN` | none | Fallback registry credentials; the dashboard's take priority. |
+| `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` | none | Same, for Docker Hub. |
+
+Keep `DOCKYARD_SECRET` safe and unchanged. Environment variables, hook secrets,
+registry credentials and the tunnel token are encrypted with it, and become
+unreadable if it changes.
+
+## Deploy hook reference
 
 ```
 POST /api/hooks/<app-id>
@@ -152,39 +223,63 @@ X-Dockyard-Signature: sha256=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>
 ```
 
 Requests older than 5 minutes are rejected. `digest` and `commit` are optional;
-without `digest`, the image tag is pulled as-is.
+without `digest`, the image tag is pulled as it is.
 
-With the global deploy hook on, the same request can go to `POST /api/hooks` (no app
-ID), signed with the global secret. `image` is then required: it selects the app.
+With the global deploy hook on, the same request can go to `POST /api/hooks`,
+signed with the global secret. `image` is then required, because it selects the
+app. [`scripts/test-hook.sh`](scripts/test-hook.sh) sends a signed request by hand.
+
+## Upgrading from a version configured in `.env`
+
+Earlier versions kept `BASE_DOMAIN`, `DASHBOARD_HOST` and
+`CLOUDFLARE_TUNNEL_TOKEN` in `.env` and ran `cloudflared` as a compose service.
+
+1. Run `docker compose up -d --build`. On first start the domain and tunnel token
+   are imported into the dashboard's settings, and Dockyard starts its own
+   connector.
+2. Run `docker compose up -d --remove-orphans` to retire the old `cloudflared`
+   container.
+3. Remove the three variables from `.env`; they are no longer read.
+
+Apps deployed before the upgrade keep answering on your domain. Each one also gets
+its local address the next time it is deployed.
 
 ## Development
 
 ```bash
-# terminal 1 — API on :3000 (needs Docker running locally)
-cp .env.example .env    # set DATA_DIR=./.data and the required values
+# terminal 1: API on :3000 (needs Docker running locally)
+cp .env.example .env    # add DATA_DIR=./.data and the two required values
 cd server && npm install && npm run dev
 
-# terminal 2 — dashboard on :5173, proxies /api to :3000
+# terminal 2: dashboard on :5173, proxies /api to :3000
 cd web && npm install && npm run dev
 ```
+
+Pushing to `main` publishes this repository's own image to
+`ghcr.io/<owner>/dockyard` through [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
+`docker-compose.yml` still builds from source.
 
 ## Project layout
 
 ```
+docker-compose.yml  Traefik, the socket proxy and Dockyard
+Dockerfile          Builds the dashboard and server into one image
+examples/           GitHub Actions workflows to copy into an app's repository
+scripts/            test-hook.sh, for sending a signed deploy hook by hand
 server/src/
-  index.ts        Fastify setup, static dashboard, startup checks
-  compose.ts      Validates user compose files and renders the routed version
-  deployer.ts     Per-app deploy queue: render → pull → up --wait
-  images.ts       Tracks pulled images and prunes the unused ones
-  registries.ts   Saved registry credentials for pulling private images
-  site.ts         Local or public addresses, depending on whether public access is on
-  cloudflare.ts   Sets up the Cloudflare tunnel, DNS and hook rule, and runs the connector
-  docker.ts       docker / docker compose CLI wrapper
-  routes/         auth, apps, hooks, images, tokens, agent, registries, cloudflare
+  index.ts          Fastify setup, static dashboard, startup checks
+  compose.ts        Validates user compose files and renders the routed version
+  deployer.ts       Per-app deploy queue: render → pull → up --wait
+  docker.ts         docker / docker compose CLI wrapper
+  site.ts           Local or public addresses, depending on public access
+  cloudflare.ts     Sets up the tunnel, DNS and hook rule, and runs the connector
+  registries.ts     Saved registry credentials for pulling private images
+  images.ts         Tracks pulled images and prunes the unused ones
+  routes/           auth, apps, hooks, images, tokens, agent, registries, cloudflare
 server/assets/
-  dockyard        The CLI that agents and people run inside an app's repository
-  agent-guide.md  The deployment guide served to agents
+  dockyard          The CLI that people and agents run inside an app's repository
+  agent-guide.md    The deployment guide served to agents
 web/src/
-  pages/          Apps list, New app, App detail with tabs, Images, Agents, Settings, Help
-  components/     Shared UI
+  pages/            Apps, New app, App detail and its tabs, Images, Agents, Settings, Help, Welcome
+  components/       Layout, shared UI, icons, public access setup
 ```
