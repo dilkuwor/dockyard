@@ -39,6 +39,32 @@
   }
 }
 
+/* Login page, dark panel */
+.login-dots {
+  background-image: radial-gradient(color-mix(in srgb, white 14%, transparent) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: linear-gradient(to bottom, black 20%, transparent 95%);
+  animation: login-dots-drift 60s linear infinite;
+}
+@keyframes login-dots-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 260px 260px; }
+}
+.login-rings {
+  border-radius: 9999px;
+  background: repeating-radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--color-accent) 35%, transparent) 0 1px,
+    transparent 1px 44px
+  );
+  mask-image: radial-gradient(circle at center, black 25%, transparent 70%);
+  animation: login-rings-breathe 14s ease-in-out infinite alternate;
+}
+@keyframes login-rings-breathe {
+  from { transform: scale(1); opacity: 0.55; }
+  to   { transform: scale(1.12); opacity: 0.9; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

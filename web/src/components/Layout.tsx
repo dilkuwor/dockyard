@@ -20,11 +20,13 @@ import {
   IconTerminal,
 } from './Icons'
 
-function Brand() {
+const SIDEBAR_KEY = 'dockyard.sidebar'
+
+function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <Link to="/" className="flex min-w-0 items-center gap-2.5 font-semibold tracking-tight text-ink">
+    <Link to="/" title="Dockyard" className="flex min-w-0 items-center gap-2.5 font-semibold tracking-tight text-ink">
       <Logo className="size-7" />
-      <span className="flex min-w-0 flex-col">
+      <span className={cx('flex min-w-0 flex-col', compact && 'md:hidden')}>
         <span className="text-[15px] font-bold leading-none tracking-tight">Dockyard</span>
         <span className="text-[11px] font-medium text-ink-soft">Control Plane</span>
       </span>
@@ -36,6 +38,21 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+  // Desktop only: the sidebar can shrink to an icon rail. The choice is remembered per browser.
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_KEY) === 'collapsed'
+    } catch {
+      return false
+    }
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_KEY, collapsed ? 'collapsed' : 'expanded')
+    } catch {
+      // Private windows may refuse storage; the sidebar still works, it just forgets.
+    }
+  }, [collapsed])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [query, setQuery] = useState('')
 
@@ -158,12 +175,18 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
         />
       )}
 
-      {/* One bar across the window. The sidebar starts under it, so the corner is a single line. */}
-      <header className="sticky top-0 z-30 flex h-14 items-center border-b border-rule bg-panel">
-        <div className="hidden h-full w-64 shrink-0 items-center border-r border-rule px-4 md:flex">
-          <Brand />
+      {/* The brand cell and the sidebar below it share one vertical line; the bar's bottom border
+          only spans the content area, so the two lines meet in a T rather than crossing. */}
+      <header className="sticky top-0 z-30 flex h-14 items-stretch bg-panel">
+        <div
+          className={cx(
+            'hidden shrink-0 items-center border-r border-rule transition-[width] duration-200 md:flex',
+            collapsed ? 'w-16 justify-center' : 'w-64 px-4',
+          )}
+        >
+          <Brand compact={collapsed} />
         </div>
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 px-4 md:px-5">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-4 border-b border-rule px-4 md:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
@@ -213,10 +236,23 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
       {/* Sidebar (Desktop persistent, Mobile slide-over) */}
       <aside
         className={cx(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-rule bg-panel transition-transform duration-200 md:sticky md:top-14 md:z-20 md:h-[calc(100dvh-3.5rem)] md:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-rule bg-panel transition-[transform,width] duration-200 md:sticky md:top-14 md:z-20 md:h-[calc(100dvh-3.5rem)] md:translate-x-0',
+          collapsed && 'md:w-16',
           mobileOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full md:translate-x-0',
         )}
       >
+        {/* Collapse toggle, straddling the sidebar's edge. Desktop only. */}
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+          title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+          className="absolute top-4 -right-3 z-10 hidden size-6 items-center justify-center rounded-full border border-rule bg-panel text-ink-soft shadow-xs transition-colors hover:bg-paper hover:text-ink md:inline-flex"
+        >
+          {collapsed ? <IconChevronRight className="size-3.5" /> : <IconChevronLeft className="size-3.5" />}
+        </button>
+
         {/* Brand Header, mobile drawer only. On desktop the logo lives in the top bar. */}
         <div className="flex h-14 items-center justify-between border-b border-rule px-4 md:hidden">
           <Brand />
@@ -230,29 +266,21 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
           </button>
         </div>
 
-        {/* Host Status */}
-        <div className="px-4 pt-4 pb-1">
-          <div className="flex items-center justify-between text-xs">
-            <span className="inline-flex items-center gap-1.5 font-medium text-starboard">
-              <span className="size-1.5 rounded-full bg-starboard" />
-              Host Online
-            </span>
-            <span className="max-w-28 truncate font-mono text-[11px] text-ink-soft" title={meta?.baseDomain ?? 'dockyard'}>
-              {meta?.baseDomain ?? 'local'}
-            </span>
-          </div>
-        </div>
-
         {/* Sidebar Nav Items */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+        {/* In the rail, leave room at the top so the edge toggle does not sit on the first item. */}
+        <div className={cx('flex-1 overflow-y-auto px-3 py-4 space-y-6', collapsed && 'md:px-2 md:pt-12')}>
           {/* Active App Context Box when deep inside an app */}
           {isAppScoped && activeAppId && (
             <Link
               to="/"
-              className="flex items-center gap-2 rounded-lg border border-rule bg-paper px-2.5 py-2 text-ink-soft transition-colors hover:text-ink"
+              title="All apps"
+              className={cx(
+                'flex items-center gap-2 rounded-lg border border-rule bg-paper px-2.5 py-2 text-ink-soft transition-colors hover:text-ink',
+                collapsed && 'md:justify-center md:px-0',
+              )}
             >
               <IconChevronLeft className="size-3.5 shrink-0" />
-              <span className="min-w-0">
+              <span className={cx('min-w-0', collapsed && 'md:hidden')}>
                 <span className="block text-[10px] font-semibold tracking-wide uppercase">All apps</span>
                 <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-ink">
                   <span className={cx(
@@ -268,7 +296,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
           {/* Global Navigation Groups */}
           {navGroups.map((group) => (
             <div key={group.title} className="space-y-1">
-              <div className="px-2 text-[11px] font-semibold tracking-wider text-ink-soft/80 uppercase">
+              <div className={cx('px-2 text-[11px] font-semibold tracking-wider text-ink-soft/80 uppercase', collapsed && 'md:hidden')}>
                 {group.title}
               </div>
               <nav className="space-y-0.5" aria-label={group.title}>
@@ -278,8 +306,10 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
                     <Link
                       key={item.to}
                       to={item.to}
+                      title={item.label}
                       className={cx(
                         'flex items-center justify-between rounded-md px-2.5 py-1.75 text-sm font-medium transition-colors',
+                        collapsed && 'md:justify-center md:px-0',
                         item.active
                           ? 'bg-ink/8 text-ink font-semibold'
                           : 'text-ink-soft hover:bg-ink/4 hover:text-ink',
@@ -287,10 +317,10 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Icon className={cx('size-4 shrink-0', item.active ? 'text-ink' : 'text-ink-soft/80')} />
-                        <span className="truncate">{item.label}</span>
+                        <span className={cx('truncate', collapsed && 'md:hidden')}>{item.label}</span>
                       </div>
                       {item.badge && (
-                        <span className="rounded-full bg-ink/8 px-1.5 py-0.2 text-[11px] font-semibold tabular-nums text-ink-soft">
+                        <span className={cx('rounded-full bg-ink/8 px-1.5 py-0.2 text-[11px] font-semibold tabular-nums text-ink-soft', collapsed && 'md:hidden')}>
                           {item.badge}
                         </span>
                       )}
@@ -302,10 +332,26 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
           ))}
         </div>
 
-        {/* Sidebar Footer */}
-        <div className="border-t border-rule bg-paper/50 p-3">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0">
+        {/* Where this Dockyard is reachable: its own strip above the footer, no box. */}
+        <div
+          title={meta ? `${meta.publicAccess ? 'Public access on' : 'Local only'} · ${meta.baseDomain}` : 'Online'}
+          className={cx('border-t border-rule px-4 py-2.5', collapsed && 'md:flex md:justify-center md:px-0')}
+        >
+          <div className="flex items-center gap-2 text-xs">
+            <span className="size-2 shrink-0 rounded-full bg-starboard ring-2 ring-starboard/20" />
+            <span className={cx('font-medium text-ink', collapsed && 'md:hidden')}>
+              {meta ? (meta.publicAccess ? 'Public access on' : 'Local only') : 'Online'}
+            </span>
+          </div>
+          <p className={cx('mt-0.5 truncate pl-4 font-mono text-[11px] text-ink-soft', collapsed && 'md:hidden')}>
+            {meta?.baseDomain ?? '…'}
+          </p>
+        </div>
+
+        {/* Sidebar footer */}
+        <div className={cx('border-t border-rule bg-paper/50 p-3', collapsed && 'md:p-2')}>
+          <div className={cx('flex items-center justify-between gap-2', collapsed && 'md:justify-center')}>
+            <div className={cx('min-w-0', collapsed && 'md:hidden')}>
               <p className="truncate text-xs font-semibold text-ink">Admin Session</p>
               <p className="truncate text-[11px] text-ink-soft">Single Docker Host</p>
             </div>
@@ -313,10 +359,11 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
               type="button"
               onClick={onSignOut}
               title="Sign out"
-              className="inline-flex items-center gap-1.5 rounded-md border border-rule bg-panel px-2 py-1 text-xs font-medium text-ink-soft hover:bg-paper hover:text-ink transition-colors"
+              aria-label="Sign out"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-rule bg-panel px-2 py-1 text-xs font-medium text-ink-soft transition-colors hover:bg-paper hover:text-ink"
             >
               <IconLogout className="size-3.5" />
-              <span>Out</span>
+              <span className={cx(collapsed && 'md:hidden')}>Out</span>
             </button>
           </div>
         </div>
