@@ -1,0 +1,383 @@
+#!/usr/bin/env bash
+# Dockyard CLI: deploys the app in the current git repository to a Dockyard server.
+# Needs bash, git, curl and jq. The GitHub CLI (gh) is only required when the server's
+# global deploy hook is off; otherwise it is optional and just adds build-failure reporting.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: dockyard <command>
+
+Run inside the app's git repository (it must have a GitHub remote named origin).
+
+  deploy [--name NAME] [--port PORT] [--address NAME] [--branch BRANCH] [--no-push] [--no-wait]
+      Registers the app on Dockyard if it is new (needs --port), adds
+      .github/workflows/dockyard.yml, pushes, and waits until the app is live.
+      Safe to run again: later runs update and redeploy the same app.
+      The workflow signs its call with the repository secret DOCKYARD_HOOK_SECRET.
+      With the server's global deploy hook on, that is the one global secret, which
+      you add to the repository yourself. Otherwise each app has its own secret and
+      this command stores it for you with the GitHub CLI.
+  status          Show the app's address, state and last deployment.
+  env [KEY=VALUE ...]
+      Set environment variables (merged with the existing ones). With no arguments,
+      lists the variable names. Run `dockyard redeploy` afterwards to apply them.
+  redeploy        Deploy the current image again, e.g. after changing variables.
+  logs [LINES]    Print the app's recent container logs (default 100 lines).
+  guide           Print this server's deployment guide for agents.
+
+Configuration: DOCKYARD_URL and DOCKYARD_TOKEN, from the environment or from
+~/.config/dockyard/config (KEY=VALUE lines).
+EOF
+}
+
+die() { echo "dockyard: $*" >&2; exit 1; }
+need() { command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"; }
+
+CONFIG_FILE="${DOCKYARD_CONFIG:-$HOME/.config/dockyard/config}"
+if [ -f "$CONFIG_FILE" ]; then
+  # The environment wins over the file.
+  while IFS='=' read -r key value || [ -n "$key" ]; do
+    case "$key" in
+      DOCKYARD_URL) [ -n "${DOCKYARD_URL:-}" ] || DOCKYARD_URL=$value ;;
+      DOCKYARD_TOKEN) [ -n "${DOCKYARD_TOKEN:-}" ] || DOCKYARD_TOKEN=$value ;;
+    esac
+  done < "$CONFIG_FILE"
+fi
+DOCKYARD_URL=${DOCKYARD_URL:-}
+DOCKYARD_URL=${DOCKYARD_URL%/}
+DOCKYARD_TOKEN=${DOCKYARD_TOKEN:-}
+
+require_config() {
+  need curl
+  need jq
+  [ -n "$DOCKYARD_URL" ] || die "DOCKYARD_URL is not set. Put DOCKYARD_URL and DOCKYARD_TOKEN in $CONFIG_FILE or the environment."
+  [ -n "$DOCKYARD_TOKEN" ] || die "DOCKYARD_TOKEN is not set. Create a token on the dashboard's Agents page."
+}
+
+# api METHOD PATH [JSON_BODY] -> prints the response body, fails with Dockyard's error message
+api() {
+  local method=$1 path=$2 body=${3-} out status
+  if [ -n "$body" ]; then
+    out=$(curl -sS -w '\n%{http_code}' -X "$method" "$DOCKYARD_URL$path" \
+      -H "Authorization: Bearer $DOCKYARD_TOKEN" -H 'Content-Type: application/json' -d "$body")
+  else
+    out=$(curl -sS -w '\n%{http_code}' -X "$method" "$DOCKYARD_URL$path" -H "Authorization: Bearer $DOCKYARD_TOKEN")
+  fi
+  status=${out##*$'\n'}
+  out=${out%$'\n'*}
+  if [ "${status:0:1}" != 2 ]; then
+    echo "dockyard: $method $path failed ($status): $(printf '%s' "$out" | jq -r '([.error] + (.details // [])) | join("; ")' 2>/dev/null || printf '%s' "$out")" >&2
+    [ "$status" != 401 ] || echo "dockyard: the server did not accept DOCKYARD_TOKEN. Create a new token on the dashboard's Agents page." >&2
+    return 1
+  fi
+  printf '%s' "$out"
+}
+
+# True when the GitHub CLI is installed and signed in.
+have_gh() {
+  if [ -z "${HAVE_GH:-}" ]; then
+    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then HAVE_GH=1; else HAVE_GH=0; fi
+  fi
+  [ "$HAVE_GH" = 1 ]
+}
+
+repo_root() {
+  need git
+  git rev-parse --show-toplevel 2>/dev/null || die "run this inside the app's git repository"
+}
+
+# The image GitHub Actions publishes for this repository: ghcr.io/<owner>/<repo>, lowercase.
+repo_image() {
+  local remote repo
+  remote=$(git remote get-url origin 2>/dev/null) || die "this repository has no GitHub remote yet. Create one first, for example: gh repo create <name> --private --source . --remote origin"
+  repo=$(printf '%s' "$remote" | sed -E 's#^(git@|ssh://git@|https://)github\.com[:/]##; s#\.git$##; s#/$##')
+  case "$repo" in
+    */*/*|*:*|*@*) die "origin ($remote) is not a GitHub repository" ;;
+    */*) ;;
+    *) die "origin ($remote) is not a GitHub repository" ;;
+  esac
+  printf 'ghcr.io/%s' "$(printf '%s' "$repo" | tr '[:upper:]' '[:lower:]')"
+}
+
+# Prints the id of the Dockyard app whose image comes from this repository, or nothing.
+find_app() {
+  local apps
+  apps=$(api GET /api/apps) || exit 1
+  printf '%s' "$apps" | jq -r --arg image "$1" \
+    '[.[] | select(((.image // "") | sub("[@:][^/]*$"; "")) == $image)][0].id // empty'
+}
+
+current_app() {
+  local image app
+  image=$(repo_image) || exit 1
+  app=$(find_app "$image") || exit 1
+  [ -n "$app" ] || die "this repository is not on Dockyard yet. Run: dockyard deploy --port <port>"
+  printf '%s' "$app"
+}
+
+workflow() {
+  cat <<'WORKFLOW'
+# Added by `dockyard deploy`. Builds the image, pushes it to ghcr.io and tells Dockyard to deploy it.
+name: Deploy to Dockyard
+
+on:
+  push:
+    branches: [__BRANCH__]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Image names on ghcr.io must be lowercase.
+      - id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
+
+      - name: Tell Dockyard to deploy
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          HOOK_URL: __HOOK_URL__
+          HOOK_SECRET: ${{ secrets.DOCKYARD_HOOK_SECRET }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          BODY=$(jq -nc --arg image "$IMAGE" --arg digest "$DIGEST" --arg commit "$GITHUB_SHA" \
+            '{image: $image, digest: $digest, commit: $commit}')
+          TS=$(date +%s)
+          SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$HOOK_SECRET" -hex | sed 's/^.* //')
+          curl -fsS -X POST "$HOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Dockyard-Timestamp: $TS" \
+            -H "X-Dockyard-Signature: sha256=$SIG" \
+            -d "$BODY"
+WORKFLOW
+}
+
+latest_deployment() {
+  local list
+  list=$(api GET "/api/apps/$1/deployments") || exit 1
+  printf '%s' "$list" | jq -r '.[0].id // "none"'
+}
+
+# wait_for_deploy APP PREVIOUS_DEPLOYMENT_ID [COMMIT_SHA]
+wait_for_deploy() {
+  local app=$1 previous=$2 sha=${3-} waited=0 line id status run log url
+  while [ "$waited" -lt 1500 ]; do
+    line=$(api GET "/api/apps/$app/deployments" 2>/dev/null | jq -r '.[0] | "\(.id // "none") \(.status // "none")"' 2>/dev/null) || line=""
+    id=${line%% *}
+    status=${line##* }
+    if [ -n "$id" ] && [ "$id" != "$previous" ]; then
+      case "$status" in
+        succeeded)
+          url=$(api GET "/api/apps/$app" | jq -r .url) || url=""
+          echo "Live at $url"
+          return 0
+          ;;
+        failed)
+          log=$(api GET "/api/deployments/$id" | jq -r .log) || log=""
+          echo "dockyard: the deployment failed. Dockyard's log:" >&2
+          printf '%s\n' "$log" | tail -n 25 >&2
+          case "$log" in
+            *denied*|*unauthorized*)
+              echo "dockyard: Dockyard could not pull the image. Packages on ghcr.io are private by default: either make the package public on GitHub, or add GitHub credentials on the dashboard's Settings page (Registry credentials). Then run: dockyard redeploy" >&2
+              ;;
+          esac
+          return 1
+          ;;
+      esac
+    elif [ -n "$sha" ] && have_gh; then
+      run=$(gh run list --workflow dockyard.yml --commit "$sha" --limit 1 --json conclusion,url -q '.[0] | "\(.conclusion) \(.url)"' 2>/dev/null || true)
+      case "$run" in
+        failure*|cancelled*|timed_out*|startup_failure*)
+          die "the GitHub build failed: ${run#* } (inspect it with: gh run view --log-failed)"
+          ;;
+      esac
+    fi
+    sleep 10
+    waited=$((waited + 10))
+  done
+  die "timed out waiting for the deployment. Check the repository's Actions tab on GitHub (a failed build, or a missing or wrong DOCKYARD_HOOK_SECRET, shows there) and the app's Deployments tab on Dockyard."
+}
+
+cmd_deploy() {
+  local name="" port="" address="" branch="" push=1 wait=1
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --name) name=${2-}; shift 2 ;;
+      --port) port=${2-}; shift 2 ;;
+      --address) address=${2-}; shift 2 ;;
+      --branch) branch=${2-}; shift 2 ;;
+      --no-push) push=0; shift ;;
+      --no-wait) wait=0; shift ;;
+      *) die "unknown option for deploy: $1" ;;
+    esac
+  done
+  case "$port" in *[!0-9]*) die "--port must be a number" ;; esac
+
+  require_config
+
+  local root image app hook file previous sha patch created meta hook_url repo
+  root=$(repo_root) || exit 1
+  image=$(repo_image) || exit 1
+  [ -f "$root/Dockerfile" ] || die "no Dockerfile at the repository root. Dockyard runs images, so the app needs one."
+  [ -n "$branch" ] || branch=$(git -C "$root" rev-parse --abbrev-ref HEAD)
+
+  app=$(find_app "$image") || exit 1
+  if [ -z "$app" ]; then
+    [ -n "$port" ] || die "this app is not on Dockyard yet. Pass --port <the port it listens on inside the container>."
+    [ -n "$name" ] || name=$(basename "$root")
+    created=$(api POST /api/apps "$(jq -nc --arg name "$name" --arg image "$image:latest" --arg slug "$address" --arg port "$port" \
+      '{name: $name, sourceType: "image", image: $image, port: ($port | tonumber), deploy: false} + (if $slug != "" then {slug: $slug} else {} end)')") || exit 1
+    app=$(printf '%s' "$created" | jq -r .id)
+    echo "Registered \"$name\" on Dockyard."
+  else
+    echo "Found this repository's app on Dockyard."
+    if [ -n "$name$port$address" ]; then
+      patch=$(jq -nc --arg name "$name" --arg slug "$address" --arg port "$port" \
+        '(if $name != "" then {name: $name} else {} end) + (if $slug != "" then {slug: $slug} else {} end) + (if $port != "" then {port: ($port | tonumber)} else {} end)')
+      api PATCH "/api/apps/$app" "$patch" >/dev/null
+      echo "Updated its settings."
+    fi
+  fi
+
+  repo=${image#ghcr.io/}
+  meta=$(api GET /api/meta) || exit 1
+  if [ "$(printf '%s' "$meta" | jq -r '.globalHook // false')" = true ]; then
+    # One secret for every repository: the address goes in the workflow, the secret is added by the user.
+    hook_url="https://$(printf '%s' "$meta" | jq -r .dashboardHost)/api/hooks"
+    if have_gh && ! gh secret list --json name -q '.[].name' 2>/dev/null | grep -qx DOCKYARD_HOOK_SECRET; then
+      die "this repository has no DOCKYARD_HOOK_SECRET yet. Add your Dockyard global hook secret at https://github.com/$repo/settings/secrets/actions and run this again."
+    fi
+    echo "Using the global deploy hook. The repository must have the secret DOCKYARD_HOOK_SECRET (https://github.com/$repo/settings/secrets/actions)."
+  else
+    have_gh || die "this server's global deploy hook is off, so each app has its own secret and the GitHub CLI is needed to store it. Install it and run: gh auth login (or turn on the global deploy hook on the dashboard's Agents page)."
+    hook_url='${{ secrets.DOCKYARD_HOOK_URL }}'
+    hook=$(api GET "/api/apps/$app/hook") || exit 1
+    printf '%s' "$hook" | jq -j .url | gh secret set DOCKYARD_HOOK_URL
+    printf '%s' "$hook" | jq -j .secret | gh secret set DOCKYARD_HOOK_SECRET
+    echo "Stored the app's deploy hook as GitHub secrets."
+  fi
+
+  file=.github/workflows/dockyard.yml
+  mkdir -p "$root/.github/workflows"
+  workflow | sed -e "s|__BRANCH__|$branch|" -e "s|__HOOK_URL__|$hook_url|" > "$root/$file"
+  git -C "$root" add "$file"
+  if ! git -C "$root" diff --cached --quiet -- "$file"; then
+    git -C "$root" commit -q -m "Add Dockyard deploy workflow" -- "$file"
+    echo "Committed $file."
+  fi
+
+  if [ "$push" = 0 ]; then
+    echo "Skipped pushing. Push branch $branch to GitHub to build and deploy."
+    return 0
+  fi
+
+  previous=$(latest_deployment "$app") || exit 1
+  sha=$(git -C "$root" rev-parse HEAD)
+  if [ "$(git -C "$root" rev-parse "origin/$branch" 2>/dev/null || true)" = "$sha" ]; then
+    # Nothing new to push, so start the workflow by hand.
+    have_gh || die "nothing new to push. Commit a change and run this again, or start \"Deploy to Dockyard\" by hand at https://github.com/$repo/actions"
+    gh workflow run dockyard.yml --ref "$branch" >/dev/null
+    echo "Nothing new to push; started the GitHub build for $branch."
+  else
+    git -C "$root" push -q -u origin "HEAD:$branch"
+    echo "Pushed to GitHub. The build starts on its own."
+  fi
+
+  if [ "$wait" = 0 ]; then
+    echo "Not waiting. Check progress with: dockyard status"
+    return 0
+  fi
+  echo "Waiting for GitHub to build the image and Dockyard to deploy it (usually a few minutes). Build progress: https://github.com/$repo/actions"
+  wait_for_deploy "$app" "$previous" "$sha"
+}
+
+cmd_status() {
+  require_config
+  repo_root >/dev/null
+  local app detail
+  app=$(current_app) || exit 1
+  detail=$(api GET "/api/apps/$app") || exit 1
+  printf '%s' "$detail" | jq -r \
+    '"\(.name)\n  address:     \(.url)\n  image:       \(.image)\n  containers:  \([.containers[] | "\(.service) \(.state)"] | join(", ") | if . == "" then "none" else . end)\n  last deploy: \(.lastDeployment.status // "never") (\(.lastDeployment.trigger // "-"))"'
+}
+
+cmd_env() {
+  require_config
+  repo_root >/dev/null
+  local app pair vars current
+  app=$(current_app) || exit 1
+  current=$(api GET "/api/apps/$app/env") || exit 1
+  vars=$(printf '%s' "$current" | jq -c .vars)
+  if [ $# -eq 0 ]; then
+    printf '%s' "$vars" | jq -r '.[].key'
+    return 0
+  fi
+  for pair in "$@"; do
+    case "$pair" in
+      *=*) ;;
+      *) die "expected KEY=VALUE, got: $pair" ;;
+    esac
+    vars=$(printf '%s' "$vars" | jq -c --arg key "${pair%%=*}" --arg value "${pair#*=}" 'map(select(.key != $key)) + [{key: $key, value: $value}]')
+  done
+  api PUT "/api/apps/$app/env" "$(jq -nc --argjson vars "$vars" '{vars: $vars}')" >/dev/null
+  echo "Saved $# variable(s). Run: dockyard redeploy"
+}
+
+cmd_redeploy() {
+  require_config
+  repo_root >/dev/null
+  local app previous
+  app=$(current_app) || exit 1
+  previous=$(latest_deployment "$app") || exit 1
+  api POST "/api/apps/$app/deploy" >/dev/null
+  echo "Redeploying..."
+  wait_for_deploy "$app" "$previous"
+}
+
+cmd_logs() {
+  require_config
+  repo_root >/dev/null
+  local app
+  app=$(current_app) || exit 1
+  api GET "/api/apps/$app/logs?tail=${1:-100}"
+}
+
+cmd_guide() {
+  require_config
+  api GET /api/agent/guide
+}
+
+command=${1:-help}
+[ $# -gt 0 ] && shift
+case "$command" in
+  deploy) cmd_deploy "$@" ;;
+  status) cmd_status ;;
+  env) cmd_env "$@" ;;
+  redeploy) cmd_redeploy ;;
+  logs) cmd_logs "$@" ;;
+  guide) cmd_guide ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

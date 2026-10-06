@@ -14,6 +14,8 @@ import { getServiceImage, imageCompose, parseCompose, validateCompose } from '..
 import { appEnv, appHost, enqueueDeploy } from '../deployer.js';
 import { badRequest, HttpError, notFound } from '../errors.js';
 import { generateSlug } from '../slug.js';
+import { globalHookEnabled } from './hooks.js';
+import { DOCKER_HUB, hasCredentials } from '../registries.js';
 
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const IMAGE_REF = /^[a-z0-9][a-z0-9._\-/:@]*$/i;
@@ -101,6 +103,11 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/meta', async () => ({
     baseDomain: config.baseDomain,
     dashboardHost: config.dashboardHost,
+    globalHook: globalHookEnabled(),
+    registries: {
+      ghcr: hasCredentials('ghcr.io'),
+      dockerHub: hasCredentials(DOCKER_HUB),
+    },
   }));
 
   app.get('/api/apps', async () => {

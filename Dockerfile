@@ -27,10 +27,11 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-ENV NODE_ENV=production DATA_DIR=/data PUBLIC_DIR=/app/public
+ENV NODE_ENV=production DATA_DIR=/data PUBLIC_DIR=/app/public ASSETS_DIR=/app/assets
 COPY --from=server /server/package.json ./
 COPY --from=server /server/node_modules ./node_modules
 COPY --from=server /server/dist ./dist
+COPY --from=server /server/assets ./assets
 COPY --from=web /web/dist ./public
 
 VOLUME /data

@@ -189,19 +189,19 @@ export async function ensureEdgeNetwork(): Promise<void> {
   if (create.code !== 0) throw new Error(`Could not create network ${config.edgeNetwork}: ${create.stderr}`);
 }
 
-/** Signs in to each registry that has credentials configured, so private images can be pulled. */
-export async function dockerLogin(): Promise<void> {
-  const logins = [
-    { name: 'Docker Hub', registry: [], username: config.dockerHubUsername, token: config.dockerHubToken },
-    { name: 'GitHub Container Registry', registry: ['ghcr.io'], username: config.ghcrUsername, token: config.ghcrToken },
-  ];
-  const failures: string[] = [];
-  for (const login of logins) {
-    if (!login.username || !login.token) continue;
-    const res = await run(['login', ...login.registry, '-u', login.username, '--password-stdin'], { input: login.token });
-    if (res.code !== 0) failures.push(`${login.name} login failed: ${res.stderr.trim()}`);
-  }
-  if (failures.length) throw new Error(failures.join(' '));
+// Docker Hub is the default registry and is addressed by leaving the host out.
+const registryArg = (registry: string) => (registry === 'docker.io' ? [] : [registry]);
+
+/** Signs in to a registry. Returns null on success, or Docker's explanation of what went wrong. */
+export async function registryLogin(registry: string, username: string, token: string): Promise<string | null> {
+  const res = await run(['login', ...registryArg(registry), '-u', username, '--password-stdin'], { input: token, timeoutMs: 30_000 });
+  if (res.code === 0) return null;
+  const lines = res.stderr.split('\n').map((line) => line.trim()).filter(Boolean);
+  return lines.pop() ?? 'Docker did not say why.';
+}
+
+export async function registryLogout(registry: string): Promise<void> {
+  await run(['logout', ...registryArg(registry)]);
 }
 
 export async function dockerAvailable(): Promise<boolean> {

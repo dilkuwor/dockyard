@@ -8,6 +8,9 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   const sections = [
     { to: '/', label: 'Apps', active: pathname === '/' || pathname.startsWith('/apps') },
     { to: '/images', label: 'Images', active: pathname.startsWith('/images') },
+    { to: '/agents', label: 'Agents', active: pathname.startsWith('/agents') },
+    { to: '/settings', label: 'Settings', active: pathname.startsWith('/settings') },
+    { to: '/help', label: 'Help', active: pathname.startsWith('/help') },
   ]
 
   return (
@@ -18,7 +21,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
             <Logo />
             <span className="hidden sm:inline">Dockyard</span>
           </Link>
-          <nav className="mr-auto ml-2 flex items-center gap-0.5 sm:ml-5" aria-label="Sections">
+          <nav className="mr-auto ml-2 flex min-w-0 items-center gap-0.5 overflow-x-auto sm:ml-5" aria-label="Sections">
             {sections.map((s) => (
               <Link
                 key={s.to}
@@ -33,10 +36,10 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
               </Link>
             ))}
           </nav>
-          <Link to="/apps/new">
+          <Link to="/apps/new" className="shrink-0">
             <Button variant="primary" tabIndex={-1}>New app</Button>
           </Link>
-          <Button variant="quiet" onClick={onSignOut}>Sign out</Button>
+          <Button variant="quiet" className="shrink-0" onClick={onSignOut}>Sign out</Button>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>

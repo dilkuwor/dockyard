@@ -18,6 +18,7 @@ export const config = {
   dataDir,
   appsDir: path.join(dataDir, 'apps'),
   publicDir: process.env.PUBLIC_DIR ?? path.resolve('public'),
+  assetsDir: process.env.ASSETS_DIR ?? path.resolve('assets'),
   baseDomain,
   dashboardHost: process.env.DASHBOARD_HOST ?? `dockyard.${baseDomain}`,
   edgeNetwork: process.env.EDGE_NETWORK ?? 'dockyard_edge',

@@ -82,7 +82,7 @@ export default function Deployments({ app, onChange }: { app: AppDetail; onChang
 function DeploymentLog({ id, live }: { id: string; live: boolean }) {
   const { data } = useResource(() => api.deployment(id), [id, live], live ? 1500 : false)
   return (
-    <pre className="mx-4 mb-4 max-h-96 overflow-auto rounded-md bg-console px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-console-text">
+    <pre className="mx-4 mb-4 max-h-96 overflow-auto rounded-md scheme-dark bg-console px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-console-text">
       {data?.log || 'Waiting for output…'}
     </pre>
   )

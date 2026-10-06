@@ -41,6 +41,14 @@ export function newHookSecret(): string {
   return `dys_${crypto.randomBytes(32).toString('hex')}`;
 }
 
+export function newApiToken(): string {
+  return `dyt_${crypto.randomBytes(32).toString('hex')}`;
+}
+
+export function sha256Hex(data: string): string {
+  return crypto.createHash('sha256').update(data).digest('hex');
+}
+
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function createSessionToken(): string {

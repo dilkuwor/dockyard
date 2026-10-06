@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { api, type AppDetail } from '../../api'
 import { Button, Card, CopyButton, ErrorNote, Section } from '../../components/ui'
 import { cx, useResource } from '../../lib'
@@ -193,8 +194,8 @@ export default function Webhook({ app }: { app: AppDetail }) {
             </li>
             <li>Save this file as <span className="font-mono text-[13px]">.github/workflows/deploy.yml</span>. The image is published as <span className="font-mono text-[13px]">ghcr.io/&lt;owner&gt;/&lt;repo&gt;</span>.</li>
             <li>
-              If the package is private, set <span className="font-mono text-[13px]">GHCR_USERNAME</span> and
-              <span className="font-mono text-[13px]"> GHCR_TOKEN</span> in Dockyard's <span className="font-mono text-[13px]">.env</span> (a token with read:packages) and restart Dockyard, so it can pull the image.
+              If the package is private, add GitHub credentials under <Link to="/settings" className="text-accent hover:underline">Settings</Link>,
+              Registry credentials, so Dockyard can pull the image.
             </li>
             <li>Push to main. The new deployment shows up under Deployments.</li>
           </ol>
@@ -211,7 +212,7 @@ export default function Webhook({ app }: { app: AppDetail }) {
             <li>Push to main. The new deployment shows up under Deployments.</li>
           </ol>
         )}
-        <pre className="overflow-x-auto rounded-lg bg-console px-4 py-3 font-mono text-xs leading-relaxed text-console-text">
+        <pre className="overflow-x-auto rounded-lg scheme-dark bg-console px-4 py-3 font-mono text-xs leading-relaxed text-console-text">
           {workflowText}
         </pre>
       </Section>

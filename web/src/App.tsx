@@ -7,6 +7,9 @@ import AppsPage from './pages/Apps'
 import NewAppPage from './pages/NewApp'
 import AppDetailPage from './pages/AppDetail'
 import ImagesPage from './pages/Images'
+import AgentsPage from './pages/Agents'
+import SettingsPage from './pages/Settings'
+import HelpPage from './pages/Help'
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null)
@@ -28,6 +31,9 @@ export default function App() {
         <Route path="/apps/new" element={<NewAppPage />} />
         <Route path="/apps/:id/:tab?" element={<AppDetailPage />} />
         <Route path="/images" element={<ImagesPage />} />
+        <Route path="/agents" element={<AgentsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/help" element={<HelpPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

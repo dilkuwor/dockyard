@@ -1,4 +1,4 @@
-import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { ApiError, type AppState, type DeploymentStatus } from '../api'
 import { cx } from '../lib'
 
@@ -62,6 +62,10 @@ const inputBase =
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cx(inputBase, props.className)} />
+}
+
+export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...props} className={cx(inputBase, props.className)} />
 }
 
 export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {

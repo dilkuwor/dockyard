@@ -42,6 +42,29 @@ CREATE TABLE IF NOT EXISTS deployments (
 
 CREATE INDEX IF NOT EXISTS deployments_app_idx ON deployments(app_id, created_at DESC);
 
+-- Registry sign-ins saved from the dashboard, for pulling private images.
+CREATE TABLE IF NOT EXISTS registries (
+  registry TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  token_enc TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- Server-wide settings changed from the dashboard.
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+-- API tokens for agents and scripts. Only the SHA-256 of each token is stored.
+CREATE TABLE IF NOT EXISTS tokens (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  hash TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL,
+  last_used_at INTEGER
+);
+
 -- Local images Dockyard pulled; pruning only ever considers these.
 CREATE TABLE IF NOT EXISTS images (
   id TEXT PRIMARY KEY,
@@ -76,6 +99,16 @@ export interface DeploymentRow {
   log: string;
   created_at: number;
   finished_at: number | null;
+}
+
+export function getSetting(key: string): string | null {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return row?.value ?? null;
+}
+
+export function setSetting(key: string, value: string | null): void {
+  if (value === null) db.prepare('DELETE FROM settings WHERE key = ?').run(key);
+  else db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
 }
 
 /** Deployments left mid-flight by a restart can never finish; mark them failed. */

@@ -5,13 +5,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 import { recoverInterruptedDeployments } from './db.js';
-import { dockerAvailable, dockerLogin, ensureEdgeNetwork } from './docker.js';
+import { dockerAvailable, ensureEdgeNetwork } from './docker.js';
 import { HttpError } from './errors.js';
 import { trackDeployedImages } from './images.js';
+import { loginRegistries } from './registries.js';
 import { authRoutes, requireAuth } from './routes/auth.js';
 import { appRoutes } from './routes/apps.js';
 import { hookRoutes } from './routes/hooks.js';
 import { imageRoutes } from './routes/images.js';
+import { tokenRoutes } from './routes/tokens.js';
+import { agentRoutes } from './routes/agent.js';
+import { registryRoutes } from './routes/registries.js';
 
 const server = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true, bodyLimit: 1024 * 1024 });
 
@@ -43,6 +47,9 @@ await server.register(authRoutes);
 await server.register(appRoutes);
 await server.register(hookRoutes);
 await server.register(imageRoutes);
+await server.register(tokenRoutes);
+await server.register(agentRoutes);
+await server.register(registryRoutes);
 server.get('/api/health', async () => ({ ok: true }));
 
 const indexHtml = path.join(config.publicDir, 'index.html');
@@ -60,7 +67,7 @@ recoverInterruptedDeployments();
 
 if (await dockerAvailable()) {
   await ensureEdgeNetwork();
-  await dockerLogin().catch((err) => server.log.warn(err.message));
+  await loginRegistries().catch((err) => server.log.warn(err.message));
   void trackDeployedImages().catch((err) => server.log.warn(err.message));
 } else {
   server.log.warn('Docker is not reachable. Mount /var/run/docker.sock to manage apps.');

@@ -62,6 +62,27 @@ export interface UnusedImage {
   size: number
 }
 
+export interface ApiToken {
+  id: string
+  name: string
+  createdAt: number
+  lastUsedAt: number | null
+}
+
+export interface GlobalHook {
+  enabled: boolean
+  url: string
+  secret?: string
+}
+
+export interface RegistryCredential {
+  registry: string
+  name: string
+  username: string
+  source: 'dashboard' | 'env'
+  updatedAt: number | null
+}
+
 export class ApiError extends Error {
   status: number
   details?: string[]
@@ -95,7 +116,7 @@ export const api = {
   me: () => request<{ ok: true }>('GET', '/api/auth/me'),
   login: (password: string) => request<{ ok: true }>('POST', '/api/auth/login', { password }),
   logout: () => request<{ ok: true }>('POST', '/api/auth/logout'),
-  meta: () => request<{ baseDomain: string; dashboardHost: string }>('GET', '/api/meta'),
+  meta: () => request<{ baseDomain: string; dashboardHost: string; globalHook: boolean }>('GET', '/api/meta'),
 
   listApps: () => request<AppSummary[]>('GET', '/api/apps'),
   getApp: (id: string) => request<AppDetail>('GET', `/api/apps/${id}`),
@@ -130,4 +151,17 @@ export const api = {
 
   unusedImages: () => request<{ images: UnusedImage[]; totalBytes: number }>('GET', '/api/images/unused'),
   pruneImages: () => request<{ removed: number; failed: number; bytes: number }>('POST', '/api/images/prune'),
+
+  tokens: () => request<ApiToken[]>('GET', '/api/tokens'),
+  createToken: (name: string) => request<ApiToken & { token: string }>('POST', '/api/tokens', { name }),
+  deleteToken: (id: string) => request<{ ok: true }>('DELETE', `/api/tokens/${id}`),
+
+  globalHook: () => request<GlobalHook>('GET', '/api/global-hook'),
+  enableGlobalHook: () => request<GlobalHook>('POST', '/api/global-hook'),
+  disableGlobalHook: () => request<GlobalHook>('DELETE', '/api/global-hook'),
+
+  registries: () => request<RegistryCredential[]>('GET', '/api/registries'),
+  saveRegistry: (body: { registry: string; username: string; token: string }) =>
+    request<RegistryCredential[]>('PUT', '/api/registries', body),
+  removeRegistry: (registry: string) => request<RegistryCredential[]>('DELETE', `/api/registries/${encodeURIComponent(registry)}`),
 }

@@ -76,10 +76,38 @@ Add a WAF skip rule for the `/api/hooks/` path if deploys get blocked.
 2. Open **Deploy hook** on the app, pick GitHub Container Registry or Docker Hub, add
    the secrets it lists to your GitHub repo, and commit the workflow it shows (also in
    [`examples/deploy-ghcr.yml`](examples/deploy-ghcr.yml) and [`examples/deploy.yml`](examples/deploy.yml)).
-   For private images, set `GHCR_USERNAME`/`GHCR_TOKEN` or `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN`
-   in `.env` so Dockyard can pull them.
+   For private images, add the registry's credentials under **Settings → Registry
+   credentials** so Dockyard can pull them. Docker Hub, ghcr.io and any other registry
+   are supported; credentials are verified when saved and stored encrypted. (The
+   `GHCR_*` and `DOCKERHUB_*` variables in `.env` still work as a fallback.)
 3. Every push to `main` builds, pushes and deploys that exact image digest.
    Roll back from **Deployments** any time.
+
+### Deploying with an AI agent
+
+An agent such as Claude Code can take a project folder and put it live without
+you touching the dashboard:
+
+1. On the **Agents** page, create an access token. Agents sign in with it instead
+   of the admin password, and you can revoke it at any time.
+2. Run the setup commands shown on that page on the machine where the agent works
+   (the dashboard's **Help** page walks through the install step by step).
+   They save the server address and token to `~/.config/dockyard/config` and install
+   the `dockyard` command. The machine also needs `git` and `jq`.
+3. Choose how workflows authenticate to Dockyard:
+   - **Global deploy hook** (turn it on from the Agents page): one signing secret for
+     every app. Add it to each new GitHub repository as the Actions secret
+     `DOCKYARD_HOOK_SECRET`. Dockyard picks the app from the image name, so the secret
+     can move an app to another build of its own image but not to a foreign one.
+   - **Per-app hooks** (the default): each app has its own secret, and `dockyard deploy`
+     stores it in the repository for you, which needs the GitHub CLI (`gh auth login`).
+4. In an app's folder, tell the agent: *Deploy this app to Dockyard. Run
+   `dockyard guide` first and follow it.*
+
+`dockyard guide` prints this server's deployment guide. `dockyard deploy --port 3000`
+registers the app, adds a workflow that builds the image and pushes it to ghcr.io,
+pushes the branch, and waits until the app is live. `dockyard status`, `env`, `redeploy` and `logs` cover the rest. You can
+run the same commands yourself.
 
 ### Compose rules
 
@@ -110,6 +138,9 @@ X-Dockyard-Signature: sha256=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>
 Requests older than 5 minutes are rejected. `digest` and `commit` are optional;
 without `digest`, the image tag is pulled as-is.
 
+With the global deploy hook on, the same request can go to `POST /api/hooks` (no app
+ID), signed with the global secret. `image` is then required: it selects the app.
+
 ## Development
 
 ```bash
@@ -129,9 +160,13 @@ server/src/
   compose.ts      Validates user compose files and renders the routed version
   deployer.ts     Per-app deploy queue: render → pull → up --wait
   images.ts       Tracks pulled images and prunes the unused ones
+  registries.ts   Saved registry credentials for pulling private images
   docker.ts       docker / docker compose CLI wrapper
-  routes/         auth, apps, hooks, images
+  routes/         auth, apps, hooks, images, tokens, agent, registries
+server/assets/
+  dockyard        The CLI that agents and people run inside an app's repository
+  agent-guide.md  The deployment guide served to agents
 web/src/
-  pages/          Apps list, New app, App detail with tabs, Images
+  pages/          Apps list, New app, App detail with tabs, Images, Agents, Settings, Help
   components/     Shared UI
 ```

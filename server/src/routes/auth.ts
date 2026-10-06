@@ -2,9 +2,14 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config.js';
 import { createSessionToken, safeEqual, SESSION_MAX_AGE_SECONDS, verifySessionToken } from '../crypto.js';
 import { HttpError } from '../errors.js';
+import { useApiToken } from './tokens.js';
 
 const COOKIE = 'dy_session';
-const PUBLIC_API = [/^\/api\/health$/, /^\/api\/auth\/login$/, /^\/api\/hooks\//];
+const PUBLIC_API = [/^\/api\/health$/, /^\/api\/auth\/login$/, /^\/api\/hooks(\/|$)/];
+// API tokens can do everything except manage tokens, the server-wide hook secret or
+// registry credentials, so a leaked one can't mint more access.
+const SESSION_ONLY = /^\/api\/(tokens|global-hook|registries)(\/|$)/;
+const BEARER = /^Bearer (dyt_[a-f0-9]{64})$/;
 
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const MAX_ATTEMPTS = 10;
@@ -28,9 +33,10 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply): Pro
   const url = req.url.split('?')[0];
   if (!url.startsWith('/api/')) return;
   if (PUBLIC_API.some((re) => re.test(url))) return;
-  if (!verifySessionToken(req.cookies[COOKIE])) {
-    reply.code(401).send({ error: 'Sign in to continue.' });
-  }
+  if (verifySessionToken(req.cookies[COOKIE])) return;
+  const token = BEARER.exec(req.headers.authorization ?? '')?.[1];
+  if (token && !SESSION_ONLY.test(url) && useApiToken(token)) return;
+  reply.code(401).send({ error: 'Sign in to continue.' });
 }
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {

@@ -49,7 +49,7 @@ export default function Logs({ app }: { app: AppDetail }) {
       </div>
       <pre
         ref={paneRef}
-        className="h-[60vh] overflow-auto rounded-lg bg-console px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-console-text"
+        className="h-[60vh] overflow-auto rounded-lg scheme-dark bg-console px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-console-text"
       >
         {lines.length ? lines.join('\n') : 'No log output yet.'}
       </pre>
