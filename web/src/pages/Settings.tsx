@@ -64,9 +64,9 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Registry Credentials & Platform Settings</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Registry Credentials & Platform Settings</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Configure authentication for private container registries so Dockyard can pull private images securely.
         </p>

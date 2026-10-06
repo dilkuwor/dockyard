@@ -73,9 +73,9 @@ dockyard deploy --name "My App" --port 3000 --address my-app`
   )
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">CLI Tools & Deployment Documentation</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">CLI Tools & Deployment Documentation</h1>
         <p className="mt-1 text-sm text-ink-soft">
           <span className={mono}>dockyard</span> is a lightweight CLI you run on your development computer or inside an AI agent session
           to ship and manage apps directly from git repositories.

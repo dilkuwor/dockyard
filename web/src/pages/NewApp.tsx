@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
 import { api } from '../api'
 import { Button, Card, ErrorNote, Field, TextArea, TextInput } from '../components/ui'
-import { IconRocket, IconServer, IconChevronLeft } from '../components/Icons'
+import { IconRocket, IconServer } from '../components/Icons'
 import { cx, useResource } from '../lib'
 
 const exampleCompose = `services:
@@ -58,19 +58,9 @@ export default function NewAppPage() {
     : `[generated-subdomain].${meta?.baseDomain ?? 'bytetech.cloud'}`
 
   return (
-    <div className="max-w-3xl space-y-6">
-      {/* Breadcrumb Navigation */}
-      <div className="flex items-center gap-2 text-xs text-ink-soft">
-        <Link to="/" className="inline-flex items-center gap-1 hover:text-ink font-medium">
-          <IconChevronLeft className="size-3.5" />
-          <span>Applications</span>
-        </Link>
-        <span>/</span>
-        <span className="font-semibold text-ink">New Application</span>
-      </div>
-
+    <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Deploy New Application</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Deploy New Application</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Dockyard deploys your workload immediately, assigns an automatic HTTPS certificate, and wires up live routing.
         </p>

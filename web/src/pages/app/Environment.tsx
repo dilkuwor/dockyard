@@ -47,7 +47,7 @@ export default function Environment({ app }: { app: AppDetail }) {
   const allRevealed = vars.length > 0 && revealed.size === vars.length
 
   return (
-    <Card className="max-w-4xl space-y-6 p-6">
+    <Card className="space-y-5 p-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-rule pb-4">
         <div>
           <h2 className="text-base font-semibold text-ink">Environment Variables</h2>

@@ -14,12 +14,12 @@ export default function Overview({ app }: { app: AppDetail }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       {/* Overview Metric Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="Active Image"
-          value={<span className="font-mono text-base font-semibold truncate block" title={app.image ?? ''}>{shortImage(app.image)}</span>}
+          value={<span className="block truncate font-mono text-[13px] font-semibold" title={app.image ?? ''}>{shortImage(app.image)}</span>}
           subtext={`Source: ${app.sourceType === 'image' ? 'Single Image' : 'Docker Compose'}`}
           icon={<IconServer className="size-4" />}
         />

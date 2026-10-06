@@ -120,15 +120,6 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
     },
   ]
 
-  const appSubTabs = [
-    { key: '', label: 'Overview' },
-    { key: 'deployments', label: 'Deployments' },
-    { key: 'logs', label: 'Live Logs' },
-    { key: 'environment', label: 'Environment' },
-    { key: 'webhook', label: 'Deploy Hook' },
-    { key: 'settings', label: 'App Settings' },
-  ]
-
   // Filter for search palette
   const filteredApps = (apps ?? []).filter((a) =>
     a.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -163,7 +154,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
         )}
       >
         {/* Brand Header */}
-        <div className="flex h-15 items-center justify-between border-b border-rule px-4">
+        <div className="flex h-14 items-center justify-between border-b border-rule px-4">
           <Link to="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-ink">
             <Logo className="size-7" />
             <div className="flex flex-col">
@@ -185,7 +176,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
         <div className="border-b border-rule/60 bg-paper/60 px-4 py-2.5">
           <div className="flex items-center justify-between text-xs">
             <span className="inline-flex items-center gap-1.5 font-medium text-starboard">
-              <span className="size-1.5 rounded-full bg-starboard animate-pulse" />
+              <span className="size-1.5 rounded-full bg-starboard" />
               Host Online
             </span>
             <span className="font-mono text-[11px] text-ink-soft truncate max-w-28" title={meta?.baseDomain ?? 'dockyard'}>
@@ -198,48 +189,22 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
           {/* Active App Context Box when deep inside an app */}
           {isAppScoped && activeAppId && (
-            <div className="rounded-lg border border-accent/20 bg-accent/5 p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <Link
-                  to="/"
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline"
-                >
-                  <IconChevronLeft className="size-3" />
-                  All Applications
-                </Link>
-                {currentApp && (
+            <Link
+              to="/"
+              className="flex items-center gap-2 rounded-lg border border-rule bg-paper px-2.5 py-2 text-ink-soft transition-colors hover:text-ink"
+            >
+              <IconChevronLeft className="size-3.5 shrink-0" />
+              <span className="min-w-0">
+                <span className="block text-[10px] font-semibold tracking-wide uppercase">All apps</span>
+                <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-ink">
                   <span className={cx(
-                    'size-2 rounded-full',
-                    currentApp.state === 'running' ? 'bg-starboard' : currentApp.state === 'partial' ? 'bg-warn' : 'bg-ink-soft/40'
+                    'size-1.5 shrink-0 rounded-full',
+                    currentApp?.state === 'running' ? 'bg-starboard' : currentApp?.state === 'partial' ? 'bg-warn' : 'bg-ink-soft/40'
                   )} />
-                )}
-              </div>
-              <div className="truncate font-semibold text-sm text-ink">
-                {currentApp?.name ?? activeAppId}
-              </div>
-              <nav className="space-y-0.5 pt-1" aria-label="App Subsections">
-                {appSubTabs.map((t) => {
-                  const isActive = currentTab === t.key
-                  return (
-                    <Link
-                      key={t.key}
-                      to={`/apps/${activeAppId}${t.key ? `/${t.key}` : ''}`}
-                      className={cx(
-                        'flex items-center justify-between rounded px-2 py-1 text-xs font-medium transition-colors',
-                        isActive
-                          ? 'bg-ink text-white font-semibold'
-                          : 'text-ink-soft hover:bg-ink/5 hover:text-ink'
-                      )}
-                    >
-                      <span>{t.label}</span>
-                      {t.key === 'logs' && (
-                        <span className="size-1.5 rounded-full bg-starboard" />
-                      )}
-                    </Link>
-                  )
-                })}
-              </nav>
-            </div>
+                  <span className="truncate">{currentApp?.name ?? activeAppId}</span>
+                </span>
+              </span>
+            </Link>
           )}
 
           {/* Global Navigation Groups */}
@@ -302,7 +267,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
       {/* Main Content Column */}
       <div className="flex flex-1 flex-col min-w-0">
         {/* Top Header / Operational Bar */}
-        <header className="sticky top-0 z-30 flex h-15 items-center justify-between gap-4 border-b border-rule bg-panel/90 px-4 md:px-8 backdrop-blur">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b border-rule bg-panel/90 px-4 backdrop-blur md:px-5">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
@@ -355,10 +320,8 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
         </header>
 
         {/* Content Canvas */}
-        <main className="flex-1 p-4 md:p-8">
-          <div className="mx-auto max-w-7xl">
-            {children}
-          </div>
+        <main className="min-w-0 flex-1 px-4 py-4 md:px-5 md:py-5">
+          {children}
         </main>
       </div>
 

@@ -178,9 +178,9 @@ chmod +x ~/.local/bin/dockyard`
   const prompt = 'Deploy this app to Dockyard. Run `dockyard guide` first and follow it.'
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Agent Access & CI Automation</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Agent Access & CI Automation</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Manage API tokens for autonomous AI coding agents (Claude Code, Gemini, Copilot) and configure global CI/CD webhooks.
         </p>

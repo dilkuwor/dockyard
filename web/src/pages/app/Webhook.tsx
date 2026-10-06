@@ -138,7 +138,7 @@ export default function Webhook({ app }: { app: AppDetail }) {
   }
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="space-y-5">
       <p className="max-w-2xl text-ink-soft">
         After CI pushes a new image, it calls this URL and Dockyard deploys that exact image. Requests must be signed
         with the secret, so nobody else can trigger a deploy.

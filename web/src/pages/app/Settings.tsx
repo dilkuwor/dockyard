@@ -51,7 +51,7 @@ export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: ()
   }
 
   return (
-    <div className="max-w-3xl space-y-10">
+    <div className="space-y-8">
       <Card className="space-y-6 p-5">
         <div className="grid gap-5 sm:grid-cols-[1fr_10rem_10rem]">
           <Field label="Name"><TextInput value={name} onChange={(e) => setName(e.target.value)} /></Field>

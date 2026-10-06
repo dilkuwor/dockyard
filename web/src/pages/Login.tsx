@@ -25,10 +25,8 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
     <div className="min-h-screen bg-paper flex flex-col justify-center items-center px-4 py-12">
       <div className="w-full max-w-sm">
         {/* Branding */}
-        <div className="text-center mb-8">
-          <div className="inline-flex size-12 items-center justify-center rounded-xl bg-ink text-white shadow-sm mb-4">
-            <Logo className="size-8" />
-          </div>
+        <div className="mb-8 text-center">
+          <Logo className="mx-auto mb-4 size-10" />
           <h1 className="text-2xl font-bold tracking-tight text-ink">Dockyard Cloud</h1>
           <p className="mt-1 text-xs text-ink-soft">Self-hosted container machine control plane</p>
         </div>

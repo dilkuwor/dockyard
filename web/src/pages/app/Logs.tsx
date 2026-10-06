@@ -153,7 +153,7 @@ export default function Logs({ app }: { app: AppDetail }) {
         </div>
         <pre
           ref={paneRef}
-          className="h-[68vh] overflow-auto scheme-dark bg-console p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-console-text select-text"
+          className="h-[calc(100dvh-19.5rem)] min-h-64 overflow-auto scheme-dark bg-console p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-console-text select-text"
         >
           {filteredLines.length ? (
             filteredLines.join('\n')

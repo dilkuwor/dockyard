@@ -8,7 +8,6 @@ import {
   IconImages,
   IconRocket,
   IconSearch,
-  IconPlus,
   IconExternalLink,
   IconTerminal,
 } from '../components/Icons'
@@ -49,29 +48,21 @@ export default function AppsPage() {
   })
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       {/* Page Title & Quick Actions */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Dashboard & Workloads</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-ink">Dashboard & Workloads</h1>
           <p className="mt-1 text-sm text-ink-soft">
             Real-time status of your self-hosted Docker workloads and infrastructure.
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
-          <Link to="/images">
-            <Button size="md" variant="secondary" className="gap-2">
-              <IconImages className="size-4" />
-              <span>Storage ({unusedData ? formatBytes(unusedData.totalBytes) : '—'})</span>
-            </Button>
-          </Link>
-          <Link to="/apps/new">
-            <Button size="md" variant="primary" className="gap-2">
-              <IconPlus className="size-4" />
-              <span>New App</span>
-            </Button>
-          </Link>
-        </div>
+        <Link to="/images">
+          <Button size="md" variant="secondary" className="gap-2">
+            <IconImages className="size-4" />
+            <span>Storage ({unusedData ? formatBytes(unusedData.totalBytes) : '—'})</span>
+          </Button>
+        </Link>
       </div>
 
       <ErrorNote error={error} />
@@ -114,7 +105,7 @@ export default function AppsPage() {
           icon={<IconServer className="size-5" />}
           action={
             <span className="inline-flex items-center gap-1.5 text-xs text-starboard font-medium">
-              <span className="size-1.5 rounded-full bg-starboard animate-pulse" />
+              <span className="size-1.5 rounded-full bg-starboard" />
               Traefik routing healthy
             </span>
           }
@@ -281,7 +272,7 @@ export default function AppsPage() {
 
                           {/* Running Image */}
                           <td className="px-4 py-3.5 min-w-44">
-                            <span className="truncate max-w-48 block font-mono text-xs text-ink-soft" title={app.image ?? ''}>
+                            <span className="block truncate font-mono text-xs text-ink-soft" title={app.image ?? ''}>
                               {shortImage(app.image)}
                             </span>
                           </td>

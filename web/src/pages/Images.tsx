@@ -33,9 +33,9 @@ export default function ImagesPage() {
   const count = images?.length ?? 0
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Images & Storage Reclamation</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Images & Storage Reclamation</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Images Dockyard previously pulled that are no longer used by any container. Removing them frees host disk space.
           If rolled back later, Dockyard will re-pull the required image.

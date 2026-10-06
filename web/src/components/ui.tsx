@@ -180,16 +180,16 @@ export function MetricCard({
   className?: string
 }) {
   return (
-    <Card className={cx('flex flex-col justify-between p-4 transition-all hover:border-slate-300', className)}>
+    <Card className={cx('flex flex-col justify-between px-4 py-3.5', className)}>
       <div className="flex items-start justify-between gap-2">
-        <span className="text-xs font-semibold tracking-wider text-ink-soft uppercase">{title}</span>
+        <span className="text-[11px] font-semibold tracking-wider text-ink-soft uppercase">{title}</span>
         {icon && <div className="text-ink-soft/70">{icon}</div>}
       </div>
-      <div className="my-2">
-        <div className="text-2xl font-bold tracking-tight text-ink">{value}</div>
+      <div className="mt-1.5">
+        <div className="text-xl font-semibold tracking-tight text-ink">{value}</div>
         {subtext && <div className="mt-0.5 text-[13px] text-ink-soft">{subtext}</div>}
       </div>
-      {action && <div className="mt-2 border-t border-rule/60 pt-2.5">{action}</div>}
+      {action && <div className="mt-2.5 border-t border-rule/70 pt-2">{action}</div>}
     </Card>
   )
 }
