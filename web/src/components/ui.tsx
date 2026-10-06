@@ -163,3 +163,60 @@ export function Section({ title, aside, children }: { title: string; aside?: Rea
     </section>
   )
 }
+
+export function MetricCard({
+  title,
+  value,
+  subtext,
+  icon,
+  action,
+  className,
+}: {
+  title: string
+  value: ReactNode
+  subtext?: ReactNode
+  icon?: ReactNode
+  action?: ReactNode
+  className?: string
+}) {
+  return (
+    <Card className={cx('flex flex-col justify-between p-4 transition-all hover:border-slate-300', className)}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-xs font-semibold tracking-wider text-ink-soft uppercase">{title}</span>
+        {icon && <div className="text-ink-soft/70">{icon}</div>}
+      </div>
+      <div className="my-2">
+        <div className="text-2xl font-bold tracking-tight text-ink">{value}</div>
+        {subtext && <div className="mt-0.5 text-[13px] text-ink-soft">{subtext}</div>}
+      </div>
+      {action && <div className="mt-2 border-t border-rule/60 pt-2.5">{action}</div>}
+    </Card>
+  )
+}
+
+export function ProgressBar({
+  percent,
+  tone = 'accent',
+  className,
+}: {
+  percent: number
+  tone?: 'ok' | 'warn' | 'danger' | 'accent'
+  className?: string
+}) {
+  const clamped = Math.max(0, Math.min(100, Math.round(percent)))
+  const colors = {
+    ok: 'bg-starboard',
+    warn: 'bg-warn',
+    danger: 'bg-port',
+    accent: 'bg-accent',
+  }
+  return (
+    <div className={cx('h-1.5 w-full overflow-hidden rounded-full bg-rule/70', className)}>
+      <div
+        className={cx('h-full rounded-full transition-all duration-300', colors[tone])}
+        style={{ width: `${clamped}%` }}
+      />
+    </div>
+  )
+}
+

@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { api } from '../api'
 import { Button, Card, ErrorNote, Field, TextArea, TextInput } from '../components/ui'
+import { IconRocket, IconServer, IconChevronLeft } from '../components/Icons'
 import { cx, useResource } from '../lib'
 
 const exampleCompose = `services:
@@ -52,75 +53,172 @@ export default function NewAppPage() {
     }
   }
 
+  const liveDomain = slug.trim()
+    ? `${slug.trim()}.${meta?.baseDomain ?? 'bytetech.cloud'}`
+    : `[generated-subdomain].${meta?.baseDomain ?? 'bytetech.cloud'}`
+
   return (
-    <form onSubmit={submit} className="max-w-2xl">
-      <h1 className="text-2xl font-semibold tracking-tight">New app</h1>
-      <p className="mt-1 mb-6 text-ink-soft">
-        Dockyard deploys it right away at the address you choose, or a random one like <span className="font-medium text-ink">quiet-tide-4k2p.{meta?.baseDomain ?? 'yourdomain'}</span>.
-      </p>
+    <div className="max-w-3xl space-y-6">
+      {/* Breadcrumb Navigation */}
+      <div className="flex items-center gap-2 text-xs text-ink-soft">
+        <Link to="/" className="inline-flex items-center gap-1 hover:text-ink font-medium">
+          <IconChevronLeft className="size-3.5" />
+          <span>Applications</span>
+        </Link>
+        <span>/</span>
+        <span className="font-semibold text-ink">New Application</span>
+      </div>
 
-      <Card className="space-y-6 p-6">
-        <Field label="Name">
-          <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Interview API" required autoFocus />
-        </Field>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Deploy New Application</h1>
+        <p className="mt-1 text-sm text-ink-soft">
+          Dockyard deploys your workload immediately, assigns an automatic HTTPS certificate, and wires up live routing.
+        </p>
+      </div>
 
-        <Field label="Address" hint="Leave blank for a random one.">
-          <span className="flex max-w-md">
-            <TextInput value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="my-app" className="rounded-r-none font-mono text-[13px]" />
-            <span className="inline-flex items-center rounded-r-md border border-l-0 border-rule bg-paper px-3 font-mono text-[13px] whitespace-nowrap text-ink-soft">
-              .{meta?.baseDomain ?? 'yourdomain'}
-            </span>
-          </span>
-        </Field>
+      <form onSubmit={submit}>
+        <Card className="p-6 space-y-6 shadow-sm">
+          {/* General Metadata */}
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Application Name">
+              <TextInput
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Production API"
+                required
+                autoFocus
+              />
+            </Field>
 
-        <fieldset>
-          <legend className="mb-1.5 text-sm font-medium">What are you deploying?</legend>
-          <div className="inline-flex rounded-md border border-rule bg-paper p-0.5">
-            {(['image', 'compose'] as const).map((t) => (
+            <Field label="Subdomain / Slug" hint="Leave blank to auto-generate a random 2-word subdomain.">
+              <div className="flex">
+                <TextInput
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  placeholder="my-app"
+                  className="rounded-r-none font-mono text-xs"
+                />
+                <span className="inline-flex items-center rounded-r-md border border-l-0 border-rule bg-paper px-2.5 font-mono text-xs text-ink-soft whitespace-nowrap">
+                  .{meta?.baseDomain ?? 'domain'}
+                </span>
+              </div>
+            </Field>
+          </div>
+
+          {/* Subdomain Preview Banner */}
+          <div className="rounded-lg border border-rule/70 bg-paper/60 px-4 py-2.5 flex items-center justify-between text-xs">
+            <span className="text-ink-soft">Public HTTPS Address:</span>
+            <span className="font-mono font-medium text-accent">https://{liveDomain}</span>
+          </div>
+
+          {/* Workload Deployment Type Selector */}
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-ink">Deployment Type</label>
+            <div className="grid grid-cols-2 gap-3">
               <button
-                key={t}
                 type="button"
-                aria-pressed={sourceType === t}
-                onClick={() => setSourceType(t)}
+                onClick={() => setSourceType('image')}
                 className={cx(
-                  'rounded px-3.5 py-1.5 text-sm font-medium transition-colors',
-                  sourceType === t ? 'bg-panel text-ink shadow-xs' : 'text-ink-soft hover:text-ink',
+                  'flex items-center gap-3 rounded-lg border p-3.5 text-left transition-all',
+                  sourceType === 'image'
+                    ? 'border-ink bg-ink/5 shadow-xs font-semibold'
+                    : 'border-rule hover:bg-paper/60 text-ink-soft hover:text-ink'
                 )}
               >
-                {t === 'image' ? 'A single image' : 'A compose file'}
+                <IconServer className="size-5 shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-ink">Single Image</div>
+                  <div className="text-[11px] text-ink-soft">Pull any public or private Docker image</div>
+                </div>
               </button>
-            ))}
+
+              <button
+                type="button"
+                onClick={() => setSourceType('compose')}
+                className={cx(
+                  'flex items-center gap-3 rounded-lg border p-3.5 text-left transition-all',
+                  sourceType === 'compose'
+                    ? 'border-ink bg-ink/5 shadow-xs font-semibold'
+                    : 'border-rule hover:bg-paper/60 text-ink-soft hover:text-ink'
+                )}
+              >
+                <IconRocket className="size-5 shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-ink">Docker Compose</div>
+                  <div className="text-[11px] text-ink-soft">Multi-service stack with volumes & networking</div>
+                </div>
+              </button>
+            </div>
           </div>
-        </fieldset>
 
-        {sourceType === 'image' ? (
-          <Field label="Image" hint="Any image Docker can pull, e.g. nginx:alpine or yourname/app:latest.">
-            <TextInput value={image} onChange={(e) => setImage(e.target.value)} placeholder="yourname/app:latest" className="font-mono text-[13px]" required />
-          </Field>
-        ) : (
-          <>
+          {/* Configuration based on Source Type */}
+          {sourceType === 'image' ? (
             <Field
-              label="Compose file"
-              hint="Use images only (no build), named volumes only, and no ports. Dockyard handles routing."
+              label="Container Image"
+              hint="Any accessible Docker image (e.g. nginx:alpine, node:20, or ghcr.io/org/repo:tag)."
             >
-              <TextArea value={compose} onChange={(e) => setCompose(e.target.value)} rows={16} required />
+              <TextInput
+                value={image}
+                onChange={(e) => setImage(e.target.value)}
+                placeholder="ghcr.io/username/app:latest"
+                className="font-mono text-xs"
+                required
+              />
             </Field>
-            <Field label="Service that gets the URL" hint="Leave blank to use the first service in the file.">
-              <TextInput value={primaryService} onChange={(e) => setPrimaryService(e.target.value)} placeholder="web" />
-            </Field>
-          </>
-        )}
+          ) : (
+            <div className="space-y-4">
+              <Field
+                label="Docker Compose Definition"
+                hint="Use images only, named volumes, and omit host ports (Dockyard routes internally)."
+              >
+                <TextArea
+                  value={compose}
+                  onChange={(e) => setCompose(e.target.value)}
+                  rows={14}
+                  className="font-mono text-xs"
+                  required
+                />
+              </Field>
 
-        <Field label="Container port" hint="The port your app listens on inside the container.">
-          <TextInput type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} className="max-w-36" required />
-        </Field>
+              <Field label="Routed Service Name" hint="The specific service that receives the public HTTP traffic (default is first service).">
+                <TextInput
+                  value={primaryService}
+                  onChange={(e) => setPrimaryService(e.target.value)}
+                  placeholder="web"
+                  className="font-mono text-xs"
+                />
+              </Field>
+            </div>
+          )}
 
-        <ErrorNote error={error} />
-        <div className="flex gap-2 border-t border-rule pt-5">
-          <Button type="submit" variant="primary" busy={busy}>Create and deploy</Button>
-          <Button type="button" variant="quiet" onClick={() => navigate('/')}>Cancel</Button>
-        </div>
-      </Card>
-    </form>
+          <Field
+            label="Internal Container Port"
+            hint="The port your application listens on inside its container (commonly 80, 3000, 8080)."
+          >
+            <TextInput
+              type="number"
+              min={1}
+              max={65535}
+              value={port}
+              onChange={(e) => setPort(e.target.value)}
+              className="max-w-36 font-mono text-xs"
+              required
+            />
+          </Field>
+
+          <ErrorNote error={error} />
+
+          <div className="flex items-center gap-3 border-t border-rule pt-5">
+            <Button type="submit" variant="primary" busy={busy} className="gap-2">
+              <IconRocket className="size-4" />
+              <span>Create & Deploy Application</span>
+            </Button>
+            <Button type="button" variant="quiet" onClick={() => navigate('/')}>
+              Cancel
+            </Button>
+          </div>
+        </Card>
+      </form>
+    </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router'
 import { api, type ApiToken, type GlobalHook } from '../api'
-import { Button, Card, CopyButton, ErrorNote, Section, TextInput } from '../components/ui'
+import { Button, Card, CopyButton, ErrorNote, TextInput } from '../components/ui'
+import { IconWebhook, IconTerminal, IconCheck, IconKey, IconPlus } from '../components/Icons'
 import { timeAgo, useResource } from '../lib'
 
 function GlobalHookSection() {
@@ -27,53 +27,80 @@ function GlobalHookSection() {
   }
 
   return (
-    <Section title="Global deploy hook">
+    <Card className="p-6 space-y-5">
+      <div className="flex items-start justify-between gap-4 border-b border-rule pb-4">
+        <div className="flex items-center gap-2.5">
+          <div className="rounded-md bg-accent/10 p-2 text-accent">
+            <IconWebhook className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-ink">Global Deploy Hook</h2>
+            <p className="text-xs text-ink-soft">
+              Use a single webhook secret across all GitHub Actions workflows instead of per-app secrets.
+            </p>
+          </div>
+        </div>
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+            hook?.enabled ? 'bg-starboard/10 text-starboard' : 'bg-paper text-ink-soft'
+          }`}
+        >
+          {hook?.enabled ? 'Enabled' : 'Disabled'}
+        </span>
+      </div>
+
       <div className="space-y-4">
         <ErrorNote error={error} />
         <ErrorNote error={actionError} />
+
         {hook && !hook.enabled && (
-          <Card className="p-5">
-            <p className="text-ink-soft">
-              Off. Every app has its own deploy hook address and secret, shown on its Deploy hook tab. Turn this on to use
-              one secret for all apps instead, which you add to each new GitHub repository yourself.
+          <div className="rounded-lg border border-dashed border-rule bg-paper/50 p-5 text-center">
+            <p className="text-sm text-ink-soft">
+              Global deploy hook is currently turned off. Every app maintains its individual deploy hook address and secret.
             </p>
-            <Button className="mt-4" busy={busy} onClick={() => change(api.enableGlobalHook)}>Turn on</Button>
-          </Card>
+            <Button className="mt-4" variant="primary" busy={busy} onClick={() => change(api.enableGlobalHook)}>
+              Turn on Global Hook
+            </Button>
+          </div>
         )}
+
         {hook?.enabled && hook.secret && (
-          <Card className="p-5">
-            <p className="text-ink-soft">
-              On. Add the secret below to each app's GitHub repository as the Actions secret
-              <span className="font-mono text-[13px] text-ink"> DOCKYARD_HOOK_SECRET</span>. Dockyard picks the app from the image name
-              in the request. Any repository that holds this secret can redeploy any app here to another build of that app's
-              own image, so add it only to your own repositories.
+          <div className="space-y-5">
+            <p className="text-xs text-ink-soft leading-relaxed">
+              Add the secret below to your GitHub repository secrets as{' '}
+              <code className="font-mono text-ink font-semibold">DOCKYARD_HOOK_SECRET</code>. Dockyard matches the target app from the image name
+              in the push payload.
             </p>
-            <dl className="mt-5 space-y-5">
+            <dl className="space-y-4 rounded-lg border border-rule bg-paper/40 p-4">
               <div>
-                <dt className="mb-1.5 font-medium">Hook URL</dt>
+                <dt className="text-xs font-semibold text-ink-soft uppercase tracking-wider mb-1">Webhook Endpoint URL</dt>
                 <dd className="flex flex-wrap items-center gap-2">
-                  <code className="rounded-md border border-rule bg-paper px-3 py-1.5 font-mono text-[13px] break-all">{hook.url}</code>
+                  <code className="rounded-md border border-rule bg-panel px-3 py-1.5 font-mono text-xs text-ink break-all">
+                    {hook.url}
+                  </code>
                   <CopyButton value={hook.url} />
                 </dd>
               </div>
               <div>
-                <dt className="mb-1.5 font-medium">Signing secret</dt>
+                <dt className="text-xs font-semibold text-ink-soft uppercase tracking-wider mb-1">HMAC Signing Secret</dt>
                 <dd className="flex flex-wrap items-center gap-2">
-                  <code className="rounded-md border border-rule bg-paper px-3 py-1.5 font-mono text-[13px] break-all">
+                  <code className="rounded-md border border-rule bg-panel px-3 py-1.5 font-mono text-xs text-ink break-all">
                     {revealed ? hook.secret : `${hook.secret.slice(0, 8)}${'•'.repeat(24)}`}
                   </code>
-                  <Button size="sm" onClick={() => setRevealed(!revealed)}>{revealed ? 'Hide' : 'Show'}</Button>
+                  <Button size="sm" onClick={() => setRevealed(!revealed)}>
+                    {revealed ? 'Hide' : 'Show'}
+                  </Button>
                   <CopyButton value={hook.secret} />
                 </dd>
               </div>
             </dl>
-            <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-rule pt-4">
+            <div className="flex flex-wrap items-center gap-2 border-t border-rule pt-4">
               {confirming ? (
                 <>
-                  <span className="font-medium">
+                  <span className="text-xs font-medium text-port">
                     {confirming === 'rotate'
-                      ? 'Replace the secret? Deploys fail until every repository has the new one.'
-                      : 'Turn it off? Repositories using this secret can no longer deploy.'}
+                      ? 'Rotate secret? All GitHub repositories will require the new secret immediately.'
+                      : 'Disable global hook? Repositories relying on this secret will cease deploying.'}
                   </span>
                   <Button
                     variant="danger"
@@ -81,21 +108,27 @@ function GlobalHookSection() {
                     busy={busy}
                     onClick={() => change(confirming === 'rotate' ? api.enableGlobalHook : api.disableGlobalHook)}
                   >
-                    {confirming === 'rotate' ? 'Replace' : 'Turn off'}
+                    {confirming === 'rotate' ? 'Confirm Rotate' : 'Confirm Disable'}
                   </Button>
-                  <Button variant="quiet" size="sm" disabled={busy} onClick={() => setConfirming(null)}>Cancel</Button>
+                  <Button variant="quiet" size="sm" disabled={busy} onClick={() => setConfirming(null)}>
+                    Cancel
+                  </Button>
                 </>
               ) : (
                 <>
-                  <Button size="sm" onClick={() => setConfirming('rotate')}>Replace secret</Button>
-                  <Button variant="quiet" size="sm" onClick={() => setConfirming('off')}>Turn off</Button>
+                  <Button size="sm" onClick={() => setConfirming('rotate')}>
+                    Rotate secret
+                  </Button>
+                  <Button variant="quiet" size="sm" onClick={() => setConfirming('off')}>
+                    Disable hook
+                  </Button>
                 </>
               )}
             </div>
-          </Card>
+          </div>
         )}
       </div>
-    </Section>
+    </Card>
   )
 }
 
@@ -145,93 +178,129 @@ chmod +x ~/.local/bin/dockyard`
   const prompt = 'Deploy this app to Dockyard. Run `dockyard guide` first and follow it.'
 
   return (
-    <div className="max-w-3xl space-y-10">
+    <div className="max-w-4xl space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
-        <p className="mt-1 text-ink-soft">
-          Let an AI agent or a script deploy apps here. It signs in with an access token instead of your password,
-          and you can revoke the token at any time.
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Agent Access & CI Automation</h1>
+        <p className="mt-1 text-sm text-ink-soft">
+          Manage API tokens for autonomous AI coding agents (Claude Code, Gemini, Copilot) and configure global CI/CD webhooks.
         </p>
       </div>
 
-      <Section title="Access tokens">
-        <div className="space-y-4">
-          <form onSubmit={create} className="flex flex-wrap gap-2">
-            <TextInput
-              aria-label="Token name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Who will use it, e.g. Claude on my laptop"
-              className="max-w-sm"
-              required
-            />
-            <Button type="submit" variant="primary" busy={busy}>Create token</Button>
-          </form>
-          <ErrorNote error={error} />
-          <ErrorNote error={actionError} />
-
-          {created && (
-            <div className="rounded-lg border border-starboard/30 bg-starboard/5 p-4">
-              <p className="font-medium">Token for “{created.name}”. Copy it now; it is not shown again.</p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <code className="rounded-md border border-rule bg-panel px-3 py-1.5 font-mono text-[13px] break-all">{created.token}</code>
-                <CopyButton value={created.token} />
-              </div>
-            </div>
-          )}
-
-          {tokens && tokens.length === 0 && <p className="text-ink-soft">No tokens yet.</p>}
-          {tokens && tokens.length > 0 && (
-            <Card className="overflow-hidden">
-              <ul className="divide-y divide-rule">
-                {tokens.map((t) => (
-                  <li key={t.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3">
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{t.name}</span>
-                      <span className="block text-[13px] text-ink-soft">
-                        Created {timeAgo(t.createdAt)} · {t.lastUsedAt ? `last used ${timeAgo(t.lastUsedAt)}` : 'never used'}
-                      </span>
-                    </span>
-                    {revoking === t.id ? (
-                      <span className="flex items-center gap-2">
-                        <span className="font-medium">Revoke it?</span>
-                        <Button variant="danger" size="sm" onClick={() => revoke(t.id)}>Revoke</Button>
-                        <Button variant="quiet" size="sm" onClick={() => setRevoking(null)}>Cancel</Button>
-                      </span>
-                    ) : (
-                      <Button size="sm" onClick={() => setRevoking(t.id)}>Revoke</Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
+      {/* Access Tokens Management */}
+      <Card className="p-6 space-y-6">
+        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
+          <div className="rounded-md bg-accent/10 p-2 text-accent">
+            <IconKey className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-ink">Agent API Tokens</h2>
+            <p className="text-xs text-ink-soft">
+              Agents use these tokens to run <code className="font-mono">dockyard deploy</code> without your admin password.
+            </p>
+          </div>
         </div>
-      </Section>
 
+        <form onSubmit={create} className="flex flex-wrap items-center gap-2">
+          <TextInput
+            aria-label="Token name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Agent label (e.g. Claude Code on MacBook)"
+            className="max-w-sm text-xs"
+            required
+          />
+          <Button type="submit" variant="primary" busy={busy} className="gap-1.5 text-xs">
+            <IconPlus className="size-3.5" />
+            <span>Generate Token</span>
+          </Button>
+        </form>
+
+        <ErrorNote error={error} />
+        <ErrorNote error={actionError} />
+
+        {created && (
+          <div className="rounded-lg border border-starboard/30 bg-starboard/5 p-4 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-semibold text-starboard">
+              <IconCheck className="size-4" />
+              <span>Token created for “{created.name}”. Copy it now; it cannot be shown again.</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <code className="rounded-md border border-rule bg-panel px-3 py-1.5 font-mono text-xs text-ink break-all">
+                {created.token}
+              </code>
+              <CopyButton value={created.token} />
+            </div>
+          </div>
+        )}
+
+        {tokens && tokens.length === 0 && (
+          <p className="text-xs text-ink-soft">No active agent tokens created yet.</p>
+        )}
+
+        {tokens && tokens.length > 0 && (
+          <div className="rounded-lg border border-rule overflow-hidden">
+            <ul className="divide-y divide-rule">
+              {tokens.map((t) => (
+                <li key={t.id} className="flex flex-wrap items-center justify-between gap-4 px-4 py-3 hover:bg-paper/40 transition-colors">
+                  <div className="min-w-0">
+                    <span className="block font-semibold text-sm text-ink truncate">{t.name}</span>
+                    <span className="block text-xs text-ink-soft">
+                      Created {timeAgo(t.createdAt)} · {t.lastUsedAt ? `last used ${timeAgo(t.lastUsedAt)}` : 'never used'}
+                    </span>
+                  </div>
+                  {revoking === t.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-port">Revoke token?</span>
+                      <Button variant="danger" size="sm" onClick={() => revoke(t.id)}>
+                        Confirm
+                      </Button>
+                      <Button variant="quiet" size="sm" onClick={() => setRevoking(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="quiet" className="text-xs text-port hover:bg-port/10" onClick={() => setRevoking(t.id)}>
+                      Revoke
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
+
+      {/* Global Hook Section */}
       <GlobalHookSection />
 
-      <Section title="Connect an agent" aside={<CopyButton value={setup} label="Copy commands" />}>
-        <ol className="mb-4 list-decimal space-y-1.5 pl-5">
-          <li>Create a token above.</li>
-          <li>
-            On the machine where the agent works, run these commands. They save the server address and token, and install
-            the <span className="font-mono text-[13px]">dockyard</span> command. The machine also needs
-            <span className="font-mono text-[13px]"> git</span> and <span className="font-mono text-[13px]">jq</span>. The GitHub CLI
-            <span className="font-mono text-[13px]"> gh</span> is only needed while the global deploy hook above is off.
-          </li>
-          <li>
-            In an app's folder, tell the agent: <span className="font-medium text-ink">{prompt}</span>
-          </li>
+      {/* Connect an Agent Tutorial Snippet */}
+      <Card className="p-6 space-y-4">
+        <div className="flex items-center justify-between border-b border-rule pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="rounded-md bg-accent/10 p-2 text-accent">
+              <IconTerminal className="size-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-ink">Agent Machine Bootstrap Setup</h2>
+              <p className="text-xs text-ink-soft">Run these commands once on the computer where the AI agent runs.</p>
+            </div>
+          </div>
+          <CopyButton value={setup} label="Copy bootstrap snippet" />
+        </div>
+
+        <ol className="list-decimal space-y-2 pl-5 text-xs text-ink-soft">
+          <li>Generate an agent token using the form above.</li>
+          <li>Execute this setup block to install the <code className="font-mono text-ink">dockyard</code> binary and authentication config:</li>
         </ol>
-        <pre className="overflow-x-auto rounded-lg scheme-dark bg-console px-4 py-3 font-mono text-xs leading-relaxed text-console-text">{setup}</pre>
-        <p className="mt-3 text-[13px] text-ink-soft">
-          The agent adds a GitHub workflow to the app's repository. Each push then builds the image on GitHub, publishes it
-          to GitHub Container Registry and calls the deploy hook here. With the global deploy hook on, add
-          <span className="font-mono"> DOCKYARD_HOOK_SECRET</span> to the repository when you create it. The{' '}
-          <Link to="/help" className="text-accent hover:underline">Help</Link> page has the full install guide and fixes for common errors.
-        </p>
-      </Section>
+
+        <pre className="overflow-x-auto rounded-lg scheme-dark bg-console p-4 font-mono text-xs leading-relaxed text-console-text">
+          {setup}
+        </pre>
+
+        <div className="rounded-md bg-paper p-3 text-xs text-ink-soft">
+          Prompt your agent: <span className="font-semibold text-ink font-mono">{prompt}</span>
+        </div>
+      </Card>
     </div>
   )
 }

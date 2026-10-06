@@ -1,20 +1,21 @@
 import { useState, type FormEvent } from 'react'
 import { api, type RegistryCredential } from '../api'
-import { Button, Card, ErrorNote, Field, Section, Select, TextInput } from '../components/ui'
+import { Button, Card, ErrorNote, Field, Select, TextInput } from '../components/ui'
+import { IconKey, IconCheck, IconServer, IconPlus } from '../components/Icons'
 import { timeAgo, useResource } from '../lib'
 
 const presets = [
   {
     key: 'docker.io',
     label: 'Docker Hub',
-    hint: 'Use your Docker Hub username and a personal access token with read access (Account settings, Personal access tokens).',
+    hint: 'Use your Docker Hub username and a personal access token with read access (Account settings → Personal access tokens).',
   },
   {
     key: 'ghcr.io',
     label: 'GitHub Container Registry (ghcr.io)',
-    hint: 'Use your GitHub username and a personal access token (classic) with the read:packages scope.',
+    hint: 'Use your GitHub username and a classic personal access token with the read:packages scope.',
   },
-  { key: 'other', label: 'Another registry', hint: 'Use the username and password or token that registry gave you.' },
+  { key: 'other', label: 'Custom / Private Registry', hint: 'Use the domain and authentication credentials provided by your container registry.' },
 ]
 
 export default function SettingsPage() {
@@ -63,89 +64,158 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-10">
+    <div className="max-w-4xl space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-ink-soft">Settings that apply to this whole Dockyard, not to one app.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Registry Credentials & Platform Settings</h1>
+        <p className="mt-1 text-sm text-ink-soft">
+          Configure authentication for private container registries so Dockyard can pull private images securely.
+        </p>
       </div>
 
-      <Section title="Registry credentials">
-        <div className="space-y-4">
-          <p className="text-ink-soft">
-            Dockyard signs in to these registries so it can pull private images. Public images need nothing here.
-            Credentials are checked when you save them and stored encrypted.
-          </p>
-          <ErrorNote error={error} />
-          <ErrorNote error={removeError} />
+      <ErrorNote error={error} />
+      <ErrorNote error={removeError} />
 
-          {registries && registries.length === 0 && <p className="text-ink-soft">No registry credentials yet.</p>}
-          {registries && registries.length > 0 && (
-            <Card className="overflow-hidden">
-              <ul className="divide-y divide-rule">
-                {registries.map((r) => (
-                  <li key={r.registry} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3">
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">
-                        {r.name}
-                        {r.name !== r.registry && <span className="ml-2 font-mono text-[13px] font-normal text-ink-soft">{r.registry}</span>}
-                      </span>
-                      <span className="block text-[13px] text-ink-soft">
-                        Signed in as <span className="font-medium text-ink">{r.username}</span>
-                        {r.source === 'env' ? ' · set in the .env file' : r.updatedAt ? ` · saved ${timeAgo(r.updatedAt)}` : ''}
-                      </span>
-                    </span>
-                    {r.source === 'env' ? (
-                      <span className="text-[13px] text-ink-soft">Save credentials below to replace it</span>
-                    ) : removing === r.registry ? (
-                      <span className="flex items-center gap-2">
-                        <span className="font-medium">Remove it?</span>
-                        <Button variant="danger" size="sm" onClick={() => remove(r)}>Remove</Button>
-                        <Button variant="quiet" size="sm" onClick={() => setRemoving(null)}>Cancel</Button>
-                      </span>
-                    ) : (
-                      <Button size="sm" onClick={() => setRemoving(r.registry)}>Remove</Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-
-          <Card className="p-5">
-            <form onSubmit={save} className="space-y-5">
-              <h3 className="font-semibold">Add or replace credentials</h3>
-              <div className="grid gap-5 sm:grid-cols-2">
-                <Field label="Registry">
-                  <Select value={kind} onChange={(e) => setKind(e.target.value)}>
-                    {presets.map((p) => (
-                      <option key={p.key} value={p.key}>{p.label}</option>
-                    ))}
-                  </Select>
-                </Field>
-                {kind === 'other' && (
-                  <Field label="Registry address">
-                    <TextInput value={host} onChange={(e) => setHost(e.target.value)} placeholder="registry.example.com" className="font-mono text-[13px]" required />
-                  </Field>
-                )}
-              </div>
-              <div className="grid gap-5 sm:grid-cols-2">
-                <Field label="Username">
-                  <TextInput value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" required />
-                </Field>
-                <Field label="Access token or password">
-                  <TextInput type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="new-password" required />
-                </Field>
-              </div>
-              <p className="text-[13px] text-ink-soft">{preset.hint}</p>
-              <ErrorNote error={saveError} />
-              <div className="flex flex-wrap items-center gap-3 border-t border-rule pt-5">
-                <Button type="submit" variant="primary" busy={busy}>Save and sign in</Button>
-                {saved && <span role="status" className="font-medium text-starboard">{saved}</span>}
-              </div>
-            </form>
-          </Card>
+      {/* Connected Registries List */}
+      <Card className="p-6 space-y-5">
+        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
+          <div className="rounded-md bg-accent/10 p-2 text-accent">
+            <IconServer className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-ink">Connected Registries</h2>
+            <p className="text-xs text-ink-soft">
+              Public images pull automatically without credentials. Private images use the verified keys below.
+            </p>
+          </div>
         </div>
-      </Section>
+
+        {registries && registries.length === 0 && (
+          <div className="rounded-lg border border-dashed border-rule bg-paper/50 p-6 text-center text-xs text-ink-soft">
+            No private registries configured. Public Docker Hub and ghcr.io images will pull anonymously.
+          </div>
+        )}
+
+        {registries && registries.length > 0 && (
+          <div className="rounded-lg border border-rule overflow-hidden">
+            <ul className="divide-y divide-rule">
+              {registries.map((r) => (
+                <li key={r.registry} className="flex flex-wrap items-center justify-between gap-4 px-5 py-3.5 hover:bg-paper/40 transition-colors">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-ink">{r.name}</span>
+                      {r.name !== r.registry && (
+                        <span className="font-mono text-xs text-ink-soft bg-paper px-1.5 py-0.5 rounded">
+                          {r.registry}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-starboard bg-starboard/10 px-2 py-0.5 rounded-full">
+                        <IconCheck className="size-3" />
+                        Verified
+                      </span>
+                    </div>
+                    <span className="block text-xs text-ink-soft mt-0.5">
+                      Username: <span className="font-medium text-ink">{r.username}</span>
+                      {r.source === 'env'
+                        ? ' · Defined in host .env file'
+                        : r.updatedAt
+                        ? ` · Saved ${timeAgo(r.updatedAt)}`
+                        : ''}
+                    </span>
+                  </div>
+
+                  {r.source === 'env' ? (
+                    <span className="text-xs text-ink-soft italic">Managed by .env file</span>
+                  ) : removing === r.registry ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-port">Remove credentials?</span>
+                      <Button variant="danger" size="sm" onClick={() => remove(r)}>
+                        Confirm
+                      </Button>
+                      <Button variant="quiet" size="sm" onClick={() => setRemoving(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="quiet" className="text-xs text-port hover:bg-port/10" onClick={() => setRemoving(r.registry)}>
+                      Remove
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Card>
+
+      {/* Add / Replace Credentials Form */}
+      <Card className="p-6">
+        <form onSubmit={save} className="space-y-5">
+          <div className="flex items-center gap-2.5 border-b border-rule pb-4">
+            <div className="rounded-md bg-accent/10 p-2 text-accent">
+              <IconKey className="size-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-ink">Add or Update Registry Authentication</h2>
+              <p className="text-xs text-ink-soft">Credentials are verified against the registry upon saving and encrypted at rest.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Container Registry">
+              <Select value={kind} onChange={(e) => setKind(e.target.value)}>
+                {presets.map((p) => (
+                  <option key={p.key} value={p.key}>{p.label}</option>
+                ))}
+              </Select>
+            </Field>
+
+            {kind === 'other' && (
+              <Field label="Registry Host Address">
+                <TextInput
+                  value={host}
+                  onChange={(e) => setHost(e.target.value)}
+                  placeholder="registry.example.com"
+                  className="font-mono text-xs"
+                  required
+                />
+              </Field>
+            )}
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Username">
+              <TextInput value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" required />
+            </Field>
+            <Field label="Personal Access Token / Password">
+              <TextInput
+                type="password"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                autoComplete="new-password"
+                placeholder="ghp_•••• or token"
+                required
+              />
+            </Field>
+          </div>
+
+          <p className="text-xs text-ink-soft">{preset.hint}</p>
+
+          <ErrorNote error={saveError} />
+
+          <div className="flex flex-wrap items-center gap-3 border-t border-rule pt-4">
+            <Button type="submit" variant="primary" busy={busy} className="gap-1.5 text-xs">
+              <IconPlus className="size-3.5" />
+              <span>Verify & Save Credentials</span>
+            </Button>
+            {saved && (
+              <span role="status" className="text-xs font-semibold text-starboard flex items-center gap-1.5">
+                <IconCheck className="size-3.5" />
+                {saved}
+              </span>
+            )}
+          </div>
+        </form>
+      </Card>
     </div>
   )
 }

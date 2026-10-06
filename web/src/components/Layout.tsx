@@ -1,48 +1,468 @@
-import type { ReactNode } from 'react'
-import { Link, useLocation } from 'react-router'
-import { cx } from '../lib'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router'
+import { api } from '../api'
+import { cx, useResource } from '../lib'
 import { Button, Logo } from './ui'
+import {
+  IconApps,
+  IconDashboard,
+  IconImages,
+  IconAgent,
+  IconSettings,
+  IconHelp,
+  IconSearch,
+  IconPlus,
+  IconMenu,
+  IconX,
+  IconLogout,
+  IconChevronRight,
+  IconChevronLeft,
+  IconTerminal,
+} from './Icons'
 
 export default function Layout({ children, onSignOut }: { children: ReactNode; onSignOut: () => void }) {
   const { pathname } = useLocation()
-  const sections = [
-    { to: '/', label: 'Apps', active: pathname === '/' || pathname.startsWith('/apps') },
-    { to: '/images', label: 'Images', active: pathname.startsWith('/images') },
-    { to: '/agents', label: 'Agents', active: pathname.startsWith('/agents') },
-    { to: '/settings', label: 'Settings', active: pathname.startsWith('/settings') },
-    { to: '/help', label: 'Help', active: pathname.startsWith('/help') },
+  const navigate = useNavigate()
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const { data: meta } = useResource(api.meta, [])
+  const { data: apps } = useResource(api.listApps, [], 8000)
+
+  // Close mobile drawer on route changes
+  const [prevPathname, setPrevPathname] = useState(pathname)
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname)
+    setMobileOpen(false)
+  }
+
+  // Global keyboard shortcut for search (⌘K or /)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setPaletteOpen((v) => !v)
+      } else if (e.key === 'Escape') {
+        setPaletteOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Detect if user is scoped inside a specific app
+  const isAppScoped = pathname.startsWith('/apps/') && pathname !== '/apps/new'
+  const activeAppId = isAppScoped ? pathname.split('/')[2] : null
+  const currentApp = apps?.find((a) => a.id === activeAppId)
+  const currentTab = isAppScoped ? pathname.split('/')[3] ?? '' : ''
+
+  const runningCount = apps?.filter((a) => a.state === 'running' || a.lastDeployment?.status === 'running').length ?? 0
+  const totalAppsCount = apps?.length ?? 0
+
+  const navGroups = [
+    {
+      title: 'Workloads',
+      items: [
+        {
+          to: '/',
+          label: 'Overview & Apps',
+          icon: IconDashboard,
+          active: pathname === '/' || (!isAppScoped && pathname.startsWith('/apps')),
+          badge: totalAppsCount > 0 ? `${runningCount}/${totalAppsCount}` : undefined,
+        },
+        {
+          to: '/apps/new',
+          label: 'New Application',
+          icon: IconPlus,
+          active: pathname === '/apps/new',
+        },
+      ],
+    },
+    {
+      title: 'Infrastructure',
+      items: [
+        {
+          to: '/images',
+          label: 'Images & Storage',
+          icon: IconImages,
+          active: pathname.startsWith('/images'),
+        },
+      ],
+    },
+    {
+      title: 'Automation & CI',
+      items: [
+        {
+          to: '/agents',
+          label: 'Agent Access & CI',
+          icon: IconAgent,
+          active: pathname.startsWith('/agents'),
+        },
+      ],
+    },
+    {
+      title: 'Platform',
+      items: [
+        {
+          to: '/settings',
+          label: 'Registry Auth',
+          icon: IconSettings,
+          active: pathname.startsWith('/settings'),
+        },
+        {
+          to: '/help',
+          label: 'CLI & Docs',
+          icon: IconHelp,
+          active: pathname.startsWith('/help'),
+        },
+      ],
+    },
   ]
 
+  const appSubTabs = [
+    { key: '', label: 'Overview' },
+    { key: 'deployments', label: 'Deployments' },
+    { key: 'logs', label: 'Live Logs' },
+    { key: 'environment', label: 'Environment' },
+    { key: 'webhook', label: 'Deploy Hook' },
+    { key: 'settings', label: 'App Settings' },
+  ]
+
+  // Filter for search palette
+  const filteredApps = (apps ?? []).filter((a) =>
+    a.name.toLowerCase().includes(query.toLowerCase()) ||
+    a.slug.toLowerCase().includes(query.toLowerCase()) ||
+    (a.image ?? '').toLowerCase().includes(query.toLowerCase())
+  )
+
+  const quickLinks = [
+    { to: '/', label: 'Dashboard Overview', icon: IconDashboard },
+    { to: '/apps/new', label: 'Create New Application', icon: IconPlus },
+    { to: '/images', label: 'Unused Images & Prune', icon: IconImages },
+    { to: '/agents', label: 'Agent Tokens & Webhooks', icon: IconAgent },
+    { to: '/settings', label: 'Registry Credentials', icon: IconSettings },
+    { to: '/help', label: 'CLI Installation & Guide', icon: IconTerminal },
+  ].filter((l) => l.label.toLowerCase().includes(query.toLowerCase()))
+
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b border-rule bg-panel/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-5">
-          <Link to="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
-            <Logo />
-            <span className="hidden sm:inline">Dockyard</span>
+    <div className="min-h-screen bg-paper text-ink flex flex-col md:flex-row">
+      {/* Mobile Backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-xs md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar (Desktop persistent, Mobile slide-over) */}
+      <aside
+        className={cx(
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-rule bg-panel transition-transform duration-200 md:static md:translate-x-0',
+          mobileOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full md:translate-x-0',
+        )}
+      >
+        {/* Brand Header */}
+        <div className="flex h-15 items-center justify-between border-b border-rule px-4">
+          <Link to="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-ink">
+            <Logo className="size-7" />
+            <div className="flex flex-col">
+              <span className="text-[15px] font-bold leading-none tracking-tight">Dockyard</span>
+              <span className="text-[11px] font-medium text-ink-soft">Control Plane</span>
+            </div>
           </Link>
-          <nav className="mr-auto ml-2 flex min-w-0 items-center gap-0.5 overflow-x-auto sm:ml-5" aria-label="Sections">
-            {sections.map((s) => (
-              <Link
-                key={s.to}
-                to={s.to}
-                aria-current={s.active ? 'page' : undefined}
-                className={cx(
-                  'rounded-md px-2.5 py-1.5 font-medium transition-colors',
-                  s.active ? 'bg-ink/5 text-ink' : 'text-ink-soft hover:text-ink',
-                )}
-              >
-                {s.label}
-              </Link>
-            ))}
-          </nav>
-          <Link to="/apps/new" className="shrink-0">
-            <Button variant="primary" tabIndex={-1}>New app</Button>
-          </Link>
-          <Button variant="quiet" className="shrink-0" onClick={onSignOut}>Sign out</Button>
+          <button
+            type="button"
+            className="rounded p-1 text-ink-soft hover:bg-paper md:hidden"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+          >
+            <IconX className="size-5" />
+          </button>
         </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
+
+        {/* Host Status Pill */}
+        <div className="border-b border-rule/60 bg-paper/60 px-4 py-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="inline-flex items-center gap-1.5 font-medium text-starboard">
+              <span className="size-1.5 rounded-full bg-starboard animate-pulse" />
+              Host Online
+            </span>
+            <span className="font-mono text-[11px] text-ink-soft truncate max-w-28" title={meta?.baseDomain ?? 'dockyard'}>
+              {meta?.baseDomain ?? 'local'}
+            </span>
+          </div>
+        </div>
+
+        {/* Sidebar Nav Items */}
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+          {/* Active App Context Box when deep inside an app */}
+          {isAppScoped && activeAppId && (
+            <div className="rounded-lg border border-accent/20 bg-accent/5 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <Link
+                  to="/"
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline"
+                >
+                  <IconChevronLeft className="size-3" />
+                  All Applications
+                </Link>
+                {currentApp && (
+                  <span className={cx(
+                    'size-2 rounded-full',
+                    currentApp.state === 'running' ? 'bg-starboard' : currentApp.state === 'partial' ? 'bg-warn' : 'bg-ink-soft/40'
+                  )} />
+                )}
+              </div>
+              <div className="truncate font-semibold text-sm text-ink">
+                {currentApp?.name ?? activeAppId}
+              </div>
+              <nav className="space-y-0.5 pt-1" aria-label="App Subsections">
+                {appSubTabs.map((t) => {
+                  const isActive = currentTab === t.key
+                  return (
+                    <Link
+                      key={t.key}
+                      to={`/apps/${activeAppId}${t.key ? `/${t.key}` : ''}`}
+                      className={cx(
+                        'flex items-center justify-between rounded px-2 py-1 text-xs font-medium transition-colors',
+                        isActive
+                          ? 'bg-ink text-white font-semibold'
+                          : 'text-ink-soft hover:bg-ink/5 hover:text-ink'
+                      )}
+                    >
+                      <span>{t.label}</span>
+                      {t.key === 'logs' && (
+                        <span className="size-1.5 rounded-full bg-starboard" />
+                      )}
+                    </Link>
+                  )
+                })}
+              </nav>
+            </div>
+          )}
+
+          {/* Global Navigation Groups */}
+          {navGroups.map((group) => (
+            <div key={group.title} className="space-y-1">
+              <div className="px-2 text-[11px] font-semibold tracking-wider text-ink-soft/80 uppercase">
+                {group.title}
+              </div>
+              <nav className="space-y-0.5" aria-label={group.title}>
+                {group.items.map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className={cx(
+                        'flex items-center justify-between rounded-md px-2.5 py-1.75 text-sm font-medium transition-colors',
+                        item.active
+                          ? 'bg-ink/8 text-ink font-semibold'
+                          : 'text-ink-soft hover:bg-ink/4 hover:text-ink',
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Icon className={cx('size-4 shrink-0', item.active ? 'text-ink' : 'text-ink-soft/80')} />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                      {item.badge && (
+                        <span className="rounded-full bg-ink/8 px-1.5 py-0.2 text-[11px] font-semibold tabular-nums text-ink-soft">
+                          {item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
+              </nav>
+            </div>
+          ))}
+        </div>
+
+        {/* Sidebar Footer */}
+        <div className="border-t border-rule bg-paper/50 p-3">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-ink">Admin Session</p>
+              <p className="truncate text-[11px] text-ink-soft">Single Docker Host</p>
+            </div>
+            <button
+              type="button"
+              onClick={onSignOut}
+              title="Sign out"
+              className="inline-flex items-center gap-1.5 rounded-md border border-rule bg-panel px-2 py-1 text-xs font-medium text-ink-soft hover:bg-paper hover:text-ink transition-colors"
+            >
+              <IconLogout className="size-3.5" />
+              <span>Out</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Column */}
+      <div className="flex flex-1 flex-col min-w-0">
+        {/* Top Header / Operational Bar */}
+        <header className="sticky top-0 z-30 flex h-15 items-center justify-between gap-4 border-b border-rule bg-panel/90 px-4 md:px-8 backdrop-blur">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              className="rounded p-1 text-ink-soft hover:bg-paper md:hidden"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation"
+            >
+              <IconMenu className="size-5" />
+            </button>
+
+            {/* Breadcrumb Indicator */}
+            <div className="flex items-center gap-1.5 text-xs text-ink-soft min-w-0">
+              <Link to="/" className="hover:text-ink font-medium">Dashboard</Link>
+              {isAppScoped && currentApp && (
+                <>
+                  <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
+                  <span className="font-semibold text-ink truncate">{currentApp.name}</span>
+                  {currentTab && (
+                    <>
+                      <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
+                      <span className="capitalize">{currentTab}</span>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Actions & Search */}
+          <div className="flex items-center gap-2.5">
+            {/* Quick Find (⌘K) */}
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="hidden sm:inline-flex items-center gap-2 rounded-md border border-rule bg-paper/70 px-3 py-1.5 text-xs text-ink-soft hover:border-slate-300 hover:text-ink transition-colors"
+            >
+              <IconSearch className="size-3.5" />
+              <span>Search apps & tools…</span>
+              <kbd className="rounded border border-rule bg-panel px-1.5 py-0.5 text-[10px] font-mono text-ink-soft">⌘K</kbd>
+            </button>
+
+            {/* Quick New App CTA */}
+            <Link to="/apps/new">
+              <Button variant="primary" size="sm" className="gap-1.5">
+                <IconPlus className="size-3.5" />
+                <span>New App</span>
+              </Button>
+            </Link>
+          </div>
+        </header>
+
+        {/* Content Canvas */}
+        <main className="flex-1 p-4 md:p-8">
+          <div className="mx-auto max-w-7xl">
+            {children}
+          </div>
+        </main>
+      </div>
+
+      {/* Global Command Palette (⌘K) Modal */}
+      {paletteOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-ink/40 backdrop-blur-xs">
+          <div
+            className="fixed inset-0 -z-10"
+            onClick={() => setPaletteOpen(false)}
+          />
+          <div className="w-full max-w-lg rounded-xl border border-rule bg-panel shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+            <div className="flex items-center gap-2 border-b border-rule px-4 py-3">
+              <IconSearch className="size-4 text-ink-soft" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search applications, navigate to pages…"
+                className="flex-1 text-sm bg-transparent outline-none placeholder:text-ink-soft/60"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setPaletteOpen(false)}
+                className="text-xs font-mono rounded px-1.5 py-0.5 bg-paper text-ink-soft"
+              >
+                ESC
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto p-2 space-y-3">
+              {/* Apps List */}
+              {filteredApps.length > 0 && (
+                <div>
+                  <div className="px-2 py-1 text-[11px] font-semibold text-ink-soft uppercase tracking-wider">
+                    Applications
+                  </div>
+                  <div className="space-y-0.5">
+                    {filteredApps.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => {
+                          setPaletteOpen(false)
+                          navigate(`/apps/${a.id}`)
+                        }}
+                        className="w-full flex items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-paper transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <IconApps className="size-4 text-ink-soft shrink-0" />
+                          <div className="truncate">
+                            <span className="font-medium text-ink">{a.name}</span>
+                            <span className="ml-2 font-mono text-xs text-ink-soft">{a.url.replace('https://', '')}</span>
+                          </div>
+                        </div>
+                        <span className={cx(
+                          'text-xs px-2 py-0.5 rounded-full font-medium',
+                          a.state === 'running' ? 'bg-starboard/10 text-starboard' : 'bg-paper text-ink-soft'
+                        )}>
+                          {a.state ?? 'stopped'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Navigation Links */}
+              {quickLinks.length > 0 && (
+                <div>
+                  <div className="px-2 py-1 text-[11px] font-semibold text-ink-soft uppercase tracking-wider">
+                    Platform Navigation
+                  </div>
+                  <div className="space-y-0.5">
+                    {quickLinks.map((link) => {
+                      const Icon = link.icon
+                      return (
+                        <button
+                          key={link.to}
+                          type="button"
+                          onClick={() => {
+                            setPaletteOpen(false)
+                            navigate(link.to)
+                          }}
+                          className="w-full flex items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm hover:bg-paper transition-colors"
+                        >
+                          <Icon className="size-4 text-ink-soft shrink-0" />
+                          <span className="font-medium text-ink">{link.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {filteredApps.length === 0 && quickLinks.length === 0 && (
+                <div className="py-8 text-center text-sm text-ink-soft">
+                  No matching apps or sections found.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

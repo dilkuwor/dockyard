@@ -22,21 +22,54 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
   }
 
   return (
-    <div className="grid min-h-screen place-items-center px-5">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-xl border border-rule bg-panel p-8 shadow-sm">
-        <Logo className="size-9" />
-        <h1 className="mt-5 text-xl font-semibold tracking-tight">Sign in to Dockyard</h1>
-        <p className="mt-1 mb-6 text-ink-soft">Enter the admin password to manage your apps.</p>
-        <div className="space-y-4">
-          <Field label="Admin password">
-            <TextInput type="password" autoFocus autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </Field>
-          <ErrorNote error={error} />
-          <Button type="submit" variant="primary" busy={busy} disabled={!password} className="w-full">
-            Sign in
-          </Button>
+    <div className="min-h-screen bg-paper flex flex-col justify-center items-center px-4 py-12">
+      <div className="w-full max-w-sm">
+        {/* Branding */}
+        <div className="text-center mb-8">
+          <div className="inline-flex size-12 items-center justify-center rounded-xl bg-ink text-white shadow-sm mb-4">
+            <Logo className="size-8" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">Dockyard Cloud</h1>
+          <p className="mt-1 text-xs text-ink-soft">Self-hosted container machine control plane</p>
         </div>
-      </form>
+
+        {/* Login Card */}
+        <form onSubmit={submit} className="rounded-xl border border-rule bg-panel p-7 shadow-sm space-y-5">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Admin Authentication</h2>
+            <p className="text-xs text-ink-soft mt-0.5">Enter your server master key or admin password.</p>
+          </div>
+
+          <Field label="Admin Password">
+            <TextInput
+              type="password"
+              autoFocus
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••••••••••"
+              className="font-mono text-sm"
+              required
+            />
+          </Field>
+
+          <ErrorNote error={error} />
+
+          <Button
+            type="submit"
+            variant="primary"
+            busy={busy}
+            disabled={!password}
+            className="w-full font-semibold"
+          >
+            Authenticate Session
+          </Button>
+        </form>
+
+        <p className="text-center text-[11px] text-ink-soft/70 mt-6">
+          Dockyard · Protected by Cloudflare Access & Traefik
+        </p>
+      </div>
     </div>
   )
 }
