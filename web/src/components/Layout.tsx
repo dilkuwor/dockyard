@@ -57,6 +57,8 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   const [query, setQuery] = useState('')
 
   const { data: apps } = useResource(api.listApps, [], 8000)
+  // How the server is reachable. Polled slowly: it only changes when someone edits Settings.
+  const { data: publicAccess } = useResource(api.cloudflare, [], 60000)
 
   // Close mobile drawer on route changes
   const [prevPathname, setPrevPathname] = useState(pathname)
@@ -148,6 +150,28 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
     },
   ]
 
+  // The header names the current page. Inside an app it becomes a trail: Dashboard / App / Tab.
+  const activeNavItem = navGroups.flatMap((g) => g.items).find((i) => i.active)
+  const pageTitle = isAppScoped ? 'Apps' : activeNavItem?.label ?? 'Dashboard'
+  const tabLabels: Record<string, string> = {
+    '': 'Overview',
+    deployments: 'Deployments',
+    environment: 'Environment',
+    logs: 'Logs',
+    webhook: 'Deploy hook',
+    settings: 'Settings',
+  }
+  const currentTabLabel = tabLabels[currentTab] ?? currentTab
+
+  // Public access summary: live on a domain, tunnel down, or local only.
+  const publicState: { tone: 'live' | 'down' | 'local'; label: string; detail: string } | null = publicAccess
+    ? publicAccess.enabled && publicAccess.domain
+      ? publicAccess.connector === 'running'
+        ? { tone: 'live', label: publicAccess.domain, detail: `Public on ${publicAccess.domain}. Tunnel connector running.` }
+        : { tone: 'down', label: publicAccess.domain, detail: `Public access is on for ${publicAccess.domain} but the tunnel connector is ${publicAccess.connector}.` }
+      : { tone: 'local', label: 'Local only', detail: 'Apps are reachable on this machine only. Set up public access in Settings.' }
+    : null
+
   // Filter for search palette
   const filteredApps = (apps ?? []).filter((a) =>
     a.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -206,21 +230,52 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
             >
               <IconMenu className="size-5" />
             </button>
-            <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-soft">
-              <Link to="/" className="font-medium hover:text-ink">Dashboard</Link>
-              {isAppScoped && currentApp && (
+            <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-xs text-ink-soft">
+              {isAppScoped ? (
                 <>
+                  <Link to="/" className="font-medium hover:text-ink">Apps</Link>
                   <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
-                  <span className="truncate font-semibold text-ink">{currentApp.name}</span>
-                  {currentTab && (
+                  {currentApp ? (
                     <>
-                      <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
-                      <span className="capitalize">{currentTab}</span>
+                      <Link
+                        to={`/apps/${currentApp.id}`}
+                        className={cx('truncate', currentTab ? 'font-medium hover:text-ink' : 'font-semibold text-ink')}
+                      >
+                        {currentApp.name}
+                      </Link>
+                      {currentTab && (
+                        <>
+                          <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
+                          <span className="truncate font-semibold text-ink">{currentTabLabel}</span>
+                        </>
+                      )}
                     </>
+                  ) : (
+                    <span className="h-3 w-24 animate-pulse rounded bg-rule" aria-hidden="true" />
                   )}
                 </>
+              ) : (
+                <span className="truncate text-[13px] font-semibold text-ink">{pageTitle}</span>
               )}
-            </div>
+            </nav>
+            {publicState && (
+              <Link
+                to="/settings"
+                title={publicState.detail}
+                className="hidden shrink-0 items-center gap-1.5 rounded-full border border-rule bg-paper/70 py-0.5 pr-2.5 pl-2 text-[11px] font-medium text-ink-soft transition-colors hover:border-slate-300 hover:text-ink lg:inline-flex"
+              >
+                <span
+                  className={cx(
+                    'size-1.5 rounded-full',
+                    publicState.tone === 'live' && 'bg-starboard',
+                    publicState.tone === 'down' && 'bg-warn',
+                    publicState.tone === 'local' && 'bg-ink-soft/40',
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="max-w-48 truncate">{publicState.label}</span>
+              </Link>
+            )}
           </div>
           <div className="flex items-center gap-2.5">
             <button
