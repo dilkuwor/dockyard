@@ -179,11 +179,22 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
       <header className="sticky top-0 z-30 flex h-14 items-stretch bg-panel">
         <div
           className={cx(
-            'hidden shrink-0 items-center border-r border-rule transition-[width] duration-200 md:flex',
+            'relative hidden shrink-0 items-center border-r border-rule transition-[width] duration-200 md:flex',
             collapsed ? 'w-16 justify-center' : 'w-64 px-4',
           )}
         >
           <Brand compact={collapsed} />
+          {/* Collapse toggle, straddling the sidebar's edge and centered on the header row. Desktop only. */}
+          <button
+            type="button"
+            onClick={() => setCollapsed((v) => !v)}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+            title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+            className="absolute top-1/2 -right-3 z-10 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-full border border-rule bg-panel text-ink-soft shadow-xs transition-colors hover:bg-paper hover:text-ink"
+          >
+            {collapsed ? <IconChevronRight className="size-3.5" /> : <IconChevronLeft className="size-3.5" />}
+          </button>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-4 border-b border-rule px-4 md:px-5">
           <div className="flex min-w-0 items-center gap-3">
@@ -240,18 +251,6 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
           mobileOpen ? 'translate-x-0 shadow-xl' : '-translate-x-full md:translate-x-0',
         )}
       >
-        {/* Collapse toggle, straddling the sidebar's edge. Desktop only. */}
-        <button
-          type="button"
-          onClick={() => setCollapsed((v) => !v)}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          className="absolute top-4 -right-3 z-10 hidden size-6 items-center justify-center rounded-full border border-rule bg-panel text-ink-soft shadow-xs transition-colors hover:bg-paper hover:text-ink md:inline-flex"
-        >
-          {collapsed ? <IconChevronRight className="size-3.5" /> : <IconChevronLeft className="size-3.5" />}
-        </button>
-
         {/* Brand Header, mobile drawer only. On desktop the logo lives in the top bar. */}
         <div className="flex h-14 items-center justify-between border-b border-rule px-4 md:hidden">
           <Brand />
@@ -266,8 +265,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
         </div>
 
         {/* Sidebar Nav Items */}
-        {/* In the rail, leave room at the top so the edge toggle does not sit on the first item. */}
-        <div className={cx('flex-1 overflow-y-auto px-3 py-4 space-y-6', collapsed && 'md:px-2 md:pt-12')}>
+        <div className={cx('flex-1 overflow-y-auto px-3 py-4 space-y-6', collapsed && 'md:px-2')}>
           {/* Active App Context Box when deep inside an app */}
           {isAppScoped && activeAppId && (
             <Link
