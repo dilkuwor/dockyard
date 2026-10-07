@@ -1,8 +1,9 @@
 import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { ApiError, type AppState, type DeploymentStatus } from '../api'
 import { cx } from '../lib'
+import { IconCheck } from './Icons'
 
-type Variant = 'primary' | 'secondary' | 'quiet' | 'danger'
+type Variant = 'primary' | 'secondary' | 'quiet' | 'danger' | 'success'
 
 export function Logo({ className }: { className?: string }) {
   return (
@@ -35,6 +36,7 @@ export function Button({
         variant === 'secondary' && 'border border-rule bg-panel text-ink shadow-xs hover:bg-paper',
         variant === 'quiet' && 'text-ink-soft hover:bg-ink/5 hover:text-ink',
         variant === 'danger' && 'bg-port text-white shadow-xs hover:bg-port/90',
+        variant === 'success' && 'bg-starboard text-white shadow-xs hover:bg-starboard/90',
         className,
       )}
     >
@@ -141,13 +143,22 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
     <Button
       type="button"
       size="sm"
+      variant={copied ? 'success' : 'secondary'}
+      aria-live="polite"
       onClick={async () => {
         await navigator.clipboard.writeText(value)
         setCopied(true)
         setTimeout(() => setCopied(false), 1500)
       }}
     >
-      {copied ? 'Copied' : label}
+      {copied ? (
+        <>
+          <IconCheck className="size-3.5" />
+          <span>Copied</span>
+        </>
+      ) : (
+        label
+      )}
     </Button>
   )
 }

@@ -195,6 +195,9 @@ chmod +x ~/.local/bin/dockyard`
         </div>
       )}
 
+      {/* Global Hook Section */}
+      <GlobalHookSection />
+
       {/* Access Tokens Management */}
       <Card className="p-6 space-y-6">
         <div className="flex items-center gap-2.5 border-b border-rule pb-4">
@@ -278,9 +281,6 @@ chmod +x ~/.local/bin/dockyard`
           </div>
         )}
       </Card>
-
-      {/* Global Hook Section */}
-      <GlobalHookSection />
 
       {/* Connect an Agent Tutorial Snippet */}
       <Card className="p-6 space-y-4">
