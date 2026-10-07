@@ -16,6 +16,7 @@ import { addressDomain, appUrl, dashboardUrl, publicDomain } from '../site.js';
 import { badRequest, HttpError, notFound } from '../errors.js';
 import { generateSlug } from '../slug.js';
 import { globalHookEnabled } from './hooks.js';
+import { hasGithubToken } from '../github.js';
 import { DOCKER_HUB, hasCredentials } from '../registries.js';
 
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -107,6 +108,8 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     dashboardUrl: dashboardUrl(),
     publicAccess: publicDomain() !== null,
     globalHook: globalHookEnabled(),
+    // True when Dockyard can store deploy hook secrets in GitHub repositories itself.
+    github: hasGithubToken(),
     registries: {
       ghcr: hasCredentials('ghcr.io'),
       dockerHub: hasCredentials(DOCKER_HUB),

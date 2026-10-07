@@ -83,6 +83,12 @@ export interface RegistryCredential {
   updatedAt: number | null
 }
 
+export interface GithubStatus {
+  configured: boolean
+  login: string | null
+  updatedAt: number | null
+}
+
 export interface PublicAccessStatus {
   configured: boolean
   enabled: boolean
@@ -123,7 +129,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
-  if (res.status === 401 && path !== '/api/auth/login') {
+  if (res.status === 401 && !path.startsWith('/api/auth/')) {
     window.dispatchEvent(new Event('dockyard:signed-out'))
   }
   const text = await res.text()
@@ -137,9 +143,14 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   me: () => request<{ ok: true }>('GET', '/api/auth/me'),
+  authStatus: () => request<{ setupRequired: boolean; minPasswordLength: number }>('GET', '/api/auth/status'),
+  setup: (password: string, code: string) => request<{ ok: true }>('POST', '/api/auth/setup', { password, code }),
   login: (password: string) => request<{ ok: true }>('POST', '/api/auth/login', { password }),
+  passwordInfo: () => request<{ updatedAt: number | null }>('GET', '/api/auth/password'),
+  changePassword: (current: string, next: string) =>
+    request<{ ok: true; updatedAt: number | null }>('POST', '/api/auth/password', { current, next }),
   logout: () => request<{ ok: true }>('POST', '/api/auth/logout'),
-  meta: () => request<{ baseDomain: string; dashboardUrl: string; publicAccess: boolean; globalHook: boolean }>('GET', '/api/meta'),
+  meta: () => request<{ baseDomain: string; dashboardUrl: string; publicAccess: boolean; globalHook: boolean; github: boolean }>('GET', '/api/meta'),
 
   listApps: () => request<AppSummary[]>('GET', '/api/apps'),
   getApp: (id: string) => request<AppDetail>('GET', `/api/apps/${id}`),
@@ -198,4 +209,8 @@ export const api = {
   saveRegistry: (body: { registry: string; username: string; token: string }) =>
     request<RegistryCredential[]>('PUT', '/api/registries', body),
   removeRegistry: (registry: string) => request<RegistryCredential[]>('DELETE', `/api/registries/${encodeURIComponent(registry)}`),
+
+  github: () => request<GithubStatus>('GET', '/api/github'),
+  saveGithub: (token: string) => request<GithubStatus>('PUT', '/api/github', { token }),
+  removeGithub: () => request<GithubStatus>('DELETE', '/api/github'),
 }

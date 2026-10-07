@@ -2,20 +2,33 @@ import { useState, type FormEvent } from 'react'
 import { api } from '../api'
 import { Button, ErrorNote, Field, Logo, TextInput } from '../components/ui'
 import { IconChevronRight } from '../components/Icons'
+import { useResource } from '../lib'
 
 export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
+  // On the very first visit there is no password yet, and this page creates it instead.
+  const { data: status } = useResource(api.authStatus, [])
+  const setup = status?.setupRequired === true
+  const minLength = status?.minPasswordLength ?? 8
+
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [code, setCode] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [busy, setBusy] = useState(false)
   const [capsLock, setCapsLock] = useState(false)
+
+  const mismatch = setup && confirm.length > 0 && confirm !== password
+  const tooShort = setup && password.length > 0 && password.length < minLength
+  const canSubmit = setup ? password.length >= minLength && confirm === password && code.trim().length > 0 : password.length > 0
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
     try {
-      await api.login(password)
+      if (setup) await api.setup(password, code)
+      else await api.login(password)
       onSignedIn()
     } catch (err) {
       setError(err)
@@ -73,9 +86,11 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
                 <Logo className="size-7" />
                 <span className="font-bold text-lg text-ink">Dockyard</span>
               </div>
-              <h1 className="text-xl font-bold tracking-tight text-ink">Sign in to Dockyard</h1>
+              <h1 className="text-xl font-bold tracking-tight text-ink">{setup ? 'Create your admin password' : 'Sign in to Dockyard'}</h1>
               <p className="mt-1 text-xs text-ink-soft leading-relaxed">
-                Enter your admin master key or password to manage your cloud workloads.
+                {setup
+                  ? 'This is a fresh Dockyard. Choose the password that will manage this machine, and treat it like root.'
+                  : 'Enter your admin master key or password to manage your cloud workloads.'}
               </p>
             </div>
 
@@ -84,7 +99,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
                 <TextInput
                   type={showPassword ? 'text' : 'password'}
                   autoFocus
-                  autoComplete="current-password"
+                  autoComplete={setup ? 'new-password' : 'current-password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyUp={(e) => setCapsLock(e.getModifierState('CapsLock'))}
@@ -101,6 +116,44 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
               </div>
             </Field>
             {capsLock && <p className="-mt-3 text-xs font-medium text-warn">Caps Lock is on.</p>}
+            {tooShort && <p className="-mt-3 text-xs text-ink-soft">At least {minLength} characters.</p>}
+
+            {setup && (
+              <>
+                <Field label="Confirm Password">
+                  <TextInput
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    className="h-11 font-mono text-sm"
+                    required
+                  />
+                </Field>
+                {mismatch && <p className="-mt-3 text-xs font-medium text-warn">The passwords do not match.</p>}
+
+                <Field
+                  label="Setup Code"
+                  hint={
+                    <>
+                      Printed in the server logs when Dockyard started, so only someone with access to the machine can do this. Run{' '}
+                      <span className="font-mono">docker compose logs dockyard</span> to see it.
+                    </>
+                  }
+                >
+                  <TextInput
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    placeholder="XXXX-XXXX"
+                    className="h-11 font-mono text-sm tracking-widest"
+                    required
+                  />
+                </Field>
+              </>
+            )}
 
             <ErrorNote error={error} />
 
@@ -108,10 +161,10 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
               type="submit"
               variant="primary"
               busy={busy}
-              disabled={!password}
+              disabled={!canSubmit}
               className="h-11 w-full gap-2 text-sm font-semibold"
             >
-              <span>Sign in</span>
+              <span>{setup ? 'Create password & sign in' : 'Sign in'}</span>
               <IconChevronRight className="size-4" />
             </Button>
           </form>

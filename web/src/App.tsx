@@ -8,6 +8,7 @@ import NewAppPage from './pages/NewApp'
 import AppDetailPage from './pages/AppDetail'
 import ImagesPage from './pages/Images'
 import AgentsPage from './pages/Agents'
+import CiPage from './pages/Ci'
 import SettingsPage from './pages/Settings'
 import HelpPage from './pages/Help'
 import Welcome from './pages/Welcome'
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/apps/:id/:tab?" element={<AppDetailPage />} />
         <Route path="/images" element={<ImagesPage />} />
         <Route path="/agents" element={<AgentsPage />} />
+        <Route path="/ci" element={<CiPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/help" element={<HelpPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

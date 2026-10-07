@@ -8,6 +8,7 @@ import {
   IconDashboard,
   IconImages,
   IconAgent,
+  IconWebhook,
   IconSettings,
   IconHelp,
   IconSearch,
@@ -122,9 +123,15 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
       items: [
         {
           to: '/agents',
-          label: 'Agent Access & CI',
+          label: 'Agent Access',
           icon: IconAgent,
           active: pathname.startsWith('/agents'),
+        },
+        {
+          to: '/ci',
+          label: 'GitHub & Deploy Hooks',
+          icon: IconWebhook,
+          active: pathname.startsWith('/ci'),
         },
       ],
     },
@@ -133,7 +140,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
       items: [
         {
           to: '/settings',
-          label: 'Registry Auth',
+          label: 'Settings',
           icon: IconSettings,
           active: pathname.startsWith('/settings'),
         },
@@ -158,8 +165,9 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
     { to: '/', label: 'Dashboard Overview', icon: IconDashboard },
     { to: '/apps/new', label: 'Create New Application', icon: IconPlus },
     { to: '/images', label: 'Unused Images & Prune', icon: IconImages },
-    { to: '/agents', label: 'Agent Tokens & Webhooks', icon: IconAgent },
-    { to: '/settings', label: 'Registry Credentials', icon: IconSettings },
+    { to: '/agents', label: 'Agent Tokens & Setup', icon: IconAgent },
+    { to: '/ci', label: 'GitHub & Deploy Hooks', icon: IconWebhook },
+    { to: '/settings', label: 'Settings: Password, Public Access & Registries', icon: IconSettings },
     { to: '/help', label: 'CLI Installation & Guide', icon: IconTerminal },
   ].filter((l) => l.label.toLowerCase().includes(query.toLowerCase()))
 

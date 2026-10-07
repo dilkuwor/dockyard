@@ -30,7 +30,8 @@ export const config = {
   edgeNetwork: process.env.EDGE_NETWORK ?? 'dockyard_edge',
   traefikEntrypoint: process.env.TRAEFIK_ENTRYPOINT ?? 'web',
   secret: required('DOCKYARD_SECRET'),
-  adminPassword: required('ADMIN_PASSWORD'),
+  // Optional since the password is chosen in the dashboard on first visit. Still honoured for older installs.
+  adminPassword: process.env.ADMIN_PASSWORD || undefined,
   dockerHubUsername: process.env.DOCKERHUB_USERNAME,
   dockerHubToken: process.env.DOCKERHUB_TOKEN,
   ghcrUsername: process.env.GHCR_USERNAME,

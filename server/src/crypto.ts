@@ -51,17 +51,18 @@ export function sha256Hex(data: string): string {
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-export function createSessionToken(): string {
+/** `version` is the password's version: changing the password signs every session out. */
+export function createSessionToken(version: number): string {
   const exp = Date.now() + SESSION_TTL_MS;
-  return `${exp}.${hmacHex(signKey, `session:${exp}`)}`;
+  return `${exp}.${version}.${hmacHex(signKey, `session:${exp}:${version}`)}`;
 }
 
-export function verifySessionToken(token: string | undefined): boolean {
+export function verifySessionToken(token: string | undefined, currentVersion: number): boolean {
   if (!token) return false;
-  const [expStr, sig] = token.split('.');
+  const [expStr, versionStr, sig] = token.split('.');
   const exp = Number(expStr);
-  if (!exp || !sig || exp < Date.now()) return false;
-  return safeEqual(sig, hmacHex(signKey, `session:${exp}`));
+  if (!exp || !sig || exp < Date.now() || Number(versionStr) !== currentVersion) return false;
+  return safeEqual(sig, hmacHex(signKey, `session:${exp}:${versionStr}`));
 }
 
 export const SESSION_MAX_AGE_SECONDS = SESSION_TTL_MS / 1000;

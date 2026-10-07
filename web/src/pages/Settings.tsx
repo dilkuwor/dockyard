@@ -4,6 +4,7 @@ import { Button, Card, ErrorNote, Field, Select, TextInput } from '../components
 import { IconKey, IconCheck, IconServer, IconPlus, IconExternalLink } from '../components/Icons'
 import { timeAgo, useResource } from '../lib'
 import PublicAccess from '../components/PublicAccess'
+import ChangePassword from '../components/ChangePassword'
 
 const presets: { key: string; label: string; hint: string; tokenUrl?: string; tokenLabel?: string }[] = [
   {
@@ -74,9 +75,23 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-ink">Platform Settings</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Public access for your apps, and credentials for private container registries.
+          The dashboard password, public access for your apps, and credentials for private container registries.
         </p>
       </div>
+
+      {/* Dashboard password */}
+      <Card className="p-6 space-y-5">
+        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
+          <div className="rounded-md bg-accent/10 p-2 text-accent">
+            <IconKey className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-ink">Admin password</h2>
+            <p className="text-xs text-ink-soft">Signs you into this dashboard. Dockyard can run anything on this machine, so treat it like root.</p>
+          </div>
+        </div>
+        <ChangePassword />
+      </Card>
 
       {/* Public access through Cloudflare */}
       <Card className="p-6 space-y-5">

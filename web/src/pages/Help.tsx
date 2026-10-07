@@ -124,7 +124,9 @@ dockyard deploy --name "My App" --port 3000 --address my-app`
         <h2 className="text-base font-semibold text-ink">Deploying Your First App from CLI</h2>
         <p className="text-xs text-ink-soft leading-relaxed">
           Navigate into your application directory containing a <span className={mono}>Dockerfile</span> and connected to GitHub.
-          {meta?.globalHook ? (
+          {meta?.github ? (
+            <> Dockyard stores the <span className={mono}>DOCKYARD_HOOK_SECRET</span> repository secret for you with its GitHub token, so just run:</>
+          ) : meta?.globalHook ? (
             <> Ensure your repository Actions secret contains <span className={mono}>DOCKYARD_HOOK_SECRET</span>, then run:</>
           ) : (
             <> Dockyard configures individual repository hooks automatically with GitHub CLI:</>

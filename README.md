@@ -41,15 +41,20 @@ You need Docker with the compose plugin.
 ```bash
 cp .env.example .env
 openssl rand -hex 32          # paste into DOCKYARD_SECRET
-# set ADMIN_PASSWORD in .env
 docker compose up -d --build
+docker compose logs dockyard  # shows the one-time setup code
 ```
 
-Open `http://dockyard.localhost:8080` on the machine itself and sign in with
-`ADMIN_PASSWORD`. For a remote server, forward the port first:
-`ssh -L 8080:localhost:8080 you@server`.
+Open `http://dockyard.localhost:8080` on the machine itself. For a remote server,
+forward the port first: `ssh -L 8080:localhost:8080 you@server`.
 
-The first sign-in asks how apps should be reachable:
+The first visit asks you to create the admin password. It also asks for the setup
+code from the logs, so that only someone with access to the machine can claim a
+fresh Dockyard. The password can be changed later on the **Platform Settings**
+page. (Older installs that set `ADMIN_PASSWORD` in `.env` keep working: it is
+imported on the next start and can then be removed from the file.)
+
+Next it asks how apps should be reachable:
 
 - **On this machine only.** Nothing to set up. Apps are served at
   `http://<name>.localhost:8080`. Chrome, Firefox and curl resolve `*.localhost`
@@ -138,7 +143,7 @@ This needs public access, because GitHub has to reach Dockyard.
    Dockyard deploys that exact image digest.
 
 To use one signing secret for all apps instead of one per app, turn on the
-**Global deploy hook** on the **Agent Access & CI** page and add it to each
+**Global deploy hook** on the **GitHub & Deploy Hooks** page and add it to each
 repository as the Actions secret `DOCKYARD_HOOK_SECRET`. Dockyard picks the app
 from the image name, so the secret can move an app to another build of its own
 image but not to a foreign one.
@@ -148,7 +153,7 @@ image but not to a foreign one.
 The `dockyard` command sets up the GitHub flow for a project in one step, and an
 agent such as Claude Code can run it for you.
 
-1. On the **Agent Access & CI** page, create an access token. It is used instead of
+1. On the **Agent Access** page, create an access token. It is used instead of
    the admin password and can be revoked at any time.
 2. Install the command on the machine where you or the agent work. The **CLI &
    Docs** page has the commands, with this server's address filled in. It needs
@@ -161,9 +166,18 @@ pushes it to ghcr.io, pushes the branch, and waits until the app is live.
 `dockyard status`, `env`, `redeploy` and `logs` cover the rest, and
 `dockyard guide` prints this server's deployment guide for agents.
 
-With the global deploy hook on, you add `DOCKYARD_HOOK_SECRET` to the repository
-yourself. With it off, the command stores each app's own secret for you, which
-needs the GitHub CLI (`gh auth login`).
+The workflow signs its call with the repository secret `DOCKYARD_HOOK_SECRET`, and
+there are three ways for it to get there:
+
+- Add a GitHub token on the **GitHub & Deploy Hooks** page under **GitHub Automation**,
+  and Dockyard stores the secret in the repository itself during `dockyard deploy`.
+  Use a fine-grained token with the *Secrets: Read and write* permission on the
+  repositories you deploy from. An existing secret is left alone;
+  `dockyard deploy --reset-secret` overwrites it.
+- Without that token and with the global deploy hook on, you add the one global
+  secret to the repository yourself.
+- Without that token and with the global deploy hook off, the command stores each
+  app's own secret for you, which needs the GitHub CLI (`gh auth login`).
 
 ### Private images
 
@@ -201,7 +215,7 @@ Everything else is set from the dashboard. `.env` holds only:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `ADMIN_PASSWORD` | required | Dashboard password. Treat it like root on this machine. |
+| `ADMIN_PASSWORD` | none | Legacy. The password is chosen in the dashboard on first visit; a value here is imported once. |
 | `DOCKYARD_SECRET` | required | At least 32 characters. Encrypts stored secrets and signs sessions. |
 | `LOCAL_PORT` | `8080` | Port for the local addresses. |
 | `LOCAL_BIND` | `127.0.0.1` | Set to `0.0.0.0` to offer the local addresses to your network. |

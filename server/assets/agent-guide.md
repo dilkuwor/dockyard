@@ -30,12 +30,18 @@ The `dockyard` command below sets all of this up in one step.
 - `git`, `curl` and `jq`.
 - The workflow signs its call to Dockyard with the repository secret `DOCKYARD_HOOK_SECRET`.
   Check `GET /api/meta`:
-  - `globalHook: true`: one secret is shared by all apps and **the user adds it to the
-    repository by hand** (GitHub repository → Settings → Secrets and variables → Actions).
-    You cannot read that secret. Ask the user to confirm it is there before deploying.
-    The GitHub CLI is not needed.
-  - `globalHook: false`: each app has its own secret and `dockyard deploy` stores it for
-    you, which needs the GitHub CLI `gh`, signed in (`gh auth status`).
+  - `github: true`: Dockyard has a GitHub token of its own and `dockyard deploy` stores
+    the secret in the repository for you (only when it is missing; `--reset-secret`
+    overwrites it). Nothing else is needed, whatever `globalHook` says. If Dockyard's
+    token cannot reach the repository, the command stops with GitHub's reason; the user
+    fixes the token's repository access on the dashboard's GitHub & Deploy Hooks page.
+  - `github: false` and `globalHook: true`: one secret is shared by all apps and **the
+    user adds it to the repository by hand** (GitHub repository → Settings → Secrets and
+    variables → Actions). You cannot read that secret. Ask the user to confirm it is
+    there before deploying. The GitHub CLI is not needed.
+  - `github: false` and `globalHook: false`: each app has its own secret and
+    `dockyard deploy` stores it for you, which needs the GitHub CLI `gh`, signed in
+    (`gh auth status`).
 - The `dockyard` command. If it is not installed, fetch it from this server:
 
   ```
@@ -68,7 +74,8 @@ The `dockyard` command below sets all of this up in one step.
      Use lowercase letters, digits and hyphens. Without it, Dockyard picks a random one.
    - The command registers the app, commits `.github/workflows/dockyard.yml`, pushes
      the current branch, and waits until the app is live. It prints the address when done.
-     With the global hook off it also stores the app's hook URL and secret as GitHub secrets.
+     When Dockyard has a GitHub token, or the global hook is off, it also stores the
+     hook secret (and, with the global hook off, the hook URL) as GitHub secrets.
    - It is safe to run again. Later runs find the same app and redeploy it.
 
 4. **Set environment variables, if the app needs any:**
@@ -86,9 +93,10 @@ After this, every push to the deploy branch redeploys the app automatically.
 ## If something fails
 
 - **It times out, or the workflow's last step fails with 401 "Invalid signature"**:
-  `DOCKYARD_HOOK_SECRET` is missing from the repository or does not match. The user
-  fixes it in the repository's Actions secrets, then re-runs the workflow from the
-  Actions tab or pushes a new commit.
+  `DOCKYARD_HOOK_SECRET` is missing from the repository or does not match. When
+  `GET /api/meta` says `github: true`, run `dockyard deploy --reset-secret` to overwrite
+  it. Otherwise the user fixes it in the repository's Actions secrets, then re-runs the
+  workflow from the Actions tab or pushes a new commit.
 - **"the GitHub build failed"**: the image did not build. Run `gh run view --log-failed`,
   fix the Dockerfile or code, commit, and run `dockyard deploy` again.
 - **Dockyard could not pull the image (denied / unauthorized)**: packages on ghcr.io
@@ -118,7 +126,7 @@ Every request needs `Authorization: Bearer $DOCKYARD_TOKEN`. Bodies and response
 
 | Call | Purpose |
 | --- | --- |
-| `GET /api/meta` | Address domain, whether public access and the global hook are on, and which registries Dockyard has credentials for |
+| `GET /api/meta` | Address domain, whether public access and the global hook are on, whether Dockyard has a GitHub token (`github`), and which registries it has credentials for |
 | `GET /api/apps` | List apps with state and address |
 | `POST /api/apps` | Create: `{name, slug?, sourceType: "image", image, port, deploy?}` or `{name, slug?, sourceType: "compose", compose, primaryService?, port}` |
 | `GET /api/apps/:id` | One app, with its containers |
@@ -130,6 +138,7 @@ Every request needs `Authorization: Bearer $DOCKYARD_TOKEN`. Bodies and response
 | `POST /api/deployments/:id/rollback` | Roll back to that deployment |
 | `GET` / `PUT /api/apps/:id/env` | Read or replace variables: `{vars: [{key, value}]}` |
 | `GET /api/apps/:id/hook` | The deploy hook URL and signing secret |
+| `POST /api/apps/:id/github-secrets` | `{repo: "owner/name", reset?: boolean}`: store the hook secret in that GitHub repository with Dockyard's token. Answers `{configured: false}` without a token; otherwise `{secrets: {NAME: "added" \| "present" \| "updated"}}`. The repository must be the one the app's ghcr.io image is built from |
 | `GET /api/apps/:id/logs?tail=200` | Recent container logs (plain text) |
 | `POST /api/apps/:id/actions/{start,stop,restart}` | Control the containers |
 

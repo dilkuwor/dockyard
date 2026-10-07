@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Dockyard CLI: deploys the app in the current git repository to a Dockyard server.
 # Needs bash, git, curl and jq. The GitHub CLI (gh) is only required when the server's
-# global deploy hook is off; otherwise it is optional and just adds build-failure reporting.
+# global deploy hook is off and the server has no GitHub token of its own; otherwise it is
+# optional and just adds build-failure reporting.
 set -euo pipefail
 
 usage() {
@@ -11,13 +12,16 @@ Usage: dockyard <command>
 Run inside the app's git repository (it must have a GitHub remote named origin).
 
   deploy [--name NAME] [--port PORT] [--address NAME] [--branch BRANCH] [--no-push] [--no-wait]
+         [--reset-secret]
       Registers the app on Dockyard if it is new (needs --port), adds
       .github/workflows/dockyard.yml, pushes, and waits until the app is live.
       Safe to run again: later runs update and redeploy the same app.
       The workflow signs its call with the repository secret DOCKYARD_HOOK_SECRET.
-      With the server's global deploy hook on, that is the one global secret, which
-      you add to the repository yourself. Otherwise each app has its own secret and
-      this command stores it for you with the GitHub CLI.
+      When the server has a GitHub token (dashboard's GitHub & Deploy Hooks page), it adds
+      that secret to the repository itself if it is missing; --reset-secret makes it
+      overwrite an existing one. Without a server token: with the global deploy hook
+      on, you add the one global secret to the repository yourself; otherwise each
+      app has its own secret and this command stores it with the GitHub CLI.
   status          Show the app's address, state and last deployment.
   env [KEY=VALUE ...]
       Set environment variables (merged with the existing ones). With no arguments,
@@ -221,7 +225,7 @@ wait_for_deploy() {
 }
 
 cmd_deploy() {
-  local name="" port="" address="" branch="" push=1 wait=1
+  local name="" port="" address="" branch="" push=1 wait=1 reset_secret=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --name) name=${2-}; shift 2 ;;
@@ -230,6 +234,7 @@ cmd_deploy() {
       --branch) branch=${2-}; shift 2 ;;
       --no-push) push=0; shift ;;
       --no-wait) wait=0; shift ;;
+      --reset-secret) reset_secret=true; shift ;;
       *) die "unknown option for deploy: $1" ;;
     esac
   done
@@ -237,7 +242,7 @@ cmd_deploy() {
 
   require_config
 
-  local root image app hook file previous sha patch created meta hook_url repo
+  local root image app hook file previous sha patch created meta hook_url repo stored
   root=$(repo_root) || exit 1
   image=$(repo_image) || exit 1
   [ -f "$root/Dockerfile" ] || die "no Dockerfile at the repository root. Dockyard runs images, so the app needs one."
@@ -266,7 +271,21 @@ cmd_deploy() {
   if [ "$(printf '%s' "$meta" | jq -r '.publicAccess // false')" != true ]; then
     die "this Dockyard has no public address, so GitHub cannot call it to deploy. Set up public access on the dashboard's Settings page first."
   fi
-  if [ "$(printf '%s' "$meta" | jq -r '.globalHook // false')" = true ]; then
+  # When the server holds a GitHub token, it stores the hook secret in the repository itself.
+  # It answers {configured: false} when it has none, and we fall back to the paths below.
+  stored=$(api POST "/api/apps/$app/github-secrets" "$(jq -nc --arg repo "$repo" --argjson reset "$reset_secret" '{repo: $repo, reset: $reset}')") || exit 1
+  if [ "$(printf '%s' "$stored" | jq -r '.configured // false')" = true ]; then
+    if [ "$(printf '%s' "$stored" | jq -r .globalHook)" = true ]; then
+      hook_url="$(printf '%s' "$meta" | jq -r .dashboardUrl)/api/hooks"
+    else
+      hook_url='${{ secrets.DOCKYARD_HOOK_URL }}'
+    fi
+    echo "Deploy secret in GitHub repository $repo: $(printf '%s' "$stored" | jq -r '.secrets | to_entries | map("\(.key) \(.value)") | join(", ")')."
+    if [ "$reset_secret" != true ] && printf '%s' "$stored" | jq -e '.secrets | to_entries | all(.value == "present")' >/dev/null; then
+      echo "(Left as they were. If the workflow fails with 401 \"Invalid signature\", run: dockyard deploy --reset-secret)"
+    fi
+  elif [ "$(printf '%s' "$meta" | jq -r '.globalHook // false')" = true ]; then
+    [ "$reset_secret" != true ] || echo "Note: --reset-secret does nothing until the server has a GitHub token (dashboard's GitHub & Deploy Hooks page)."
     # One secret for every repository: the address goes in the workflow, the secret is added by the user.
     hook_url="$(printf '%s' "$meta" | jq -r .dashboardUrl)/api/hooks"
     if have_gh && ! gh secret list --json name -q '.[].name' 2>/dev/null | grep -qx DOCKYARD_HOOK_SECRET; then
@@ -274,7 +293,7 @@ cmd_deploy() {
     fi
     echo "Using the global deploy hook. The repository must have the secret DOCKYARD_HOOK_SECRET (https://github.com/$repo/settings/secrets/actions)."
   else
-    have_gh || die "this server's global deploy hook is off, so each app has its own secret and the GitHub CLI is needed to store it. Install it and run: gh auth login (or turn on the global deploy hook on the dashboard's Agents page)."
+    have_gh || die "this server's global deploy hook is off, so each app has its own secret and the GitHub CLI is needed to store it. Install it and run: gh auth login (or turn on the global deploy hook on the dashboard's GitHub & Deploy Hooks page)."
     hook_url='${{ secrets.DOCKYARD_HOOK_URL }}'
     hook=$(api GET "/api/apps/$app/hook") || exit 1
     printf '%s' "$hook" | jq -j .url | gh secret set DOCKYARD_HOOK_URL
