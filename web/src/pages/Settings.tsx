@@ -5,16 +5,21 @@ import { IconKey, IconCheck, IconServer, IconPlus, IconExternalLink } from '../c
 import { timeAgo, useResource } from '../lib'
 import PublicAccess from '../components/PublicAccess'
 
-const presets = [
+const presets: { key: string; label: string; hint: string; tokenUrl?: string; tokenLabel?: string }[] = [
   {
     key: 'docker.io',
     label: 'Docker Hub',
     hint: 'Use your Docker Hub username and a personal access token with read access (Account settings → Personal access tokens).',
+    tokenUrl: 'https://app.docker.com/settings/personal-access-tokens',
+    tokenLabel: 'Create a Docker Hub token',
   },
   {
     key: 'ghcr.io',
     label: 'GitHub Container Registry (ghcr.io)',
     hint: 'Use your GitHub username and a classic personal access token with the read:packages scope.',
+    // Opens the classic token form with the one scope Dockyard needs already ticked.
+    tokenUrl: 'https://github.com/settings/tokens/new?scopes=read:packages&description=Dockyard%20registry%20pull',
+    tokenLabel: 'Create a GitHub token',
   },
   { key: 'other', label: 'Custom / Private Registry', hint: 'Use the domain and authentication credentials provided by your container registry.' },
 ]
@@ -215,7 +220,23 @@ export default function SettingsPage() {
             </Field>
           </div>
 
-          <p className="text-xs text-ink-soft">{preset.hint}</p>
+          <p className="text-xs text-ink-soft">
+            {preset.hint}
+            {preset.tokenUrl && (
+              <>
+                {' '}
+                <a
+                  href={preset.tokenUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-accent hover:underline"
+                >
+                  {preset.tokenLabel}
+                  <IconExternalLink className="size-3" />
+                </a>
+              </>
+            )}
+          </p>
 
           <ErrorNote error={saveError} />
 
