@@ -57,8 +57,6 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   const [query, setQuery] = useState('')
 
   const { data: apps } = useResource(api.listApps, [], 8000)
-  // How the server is reachable. Polled slowly: it only changes when someone edits Settings.
-  const { data: publicAccess } = useResource(api.cloudflare, [], 60000)
 
   // Close mobile drawer on route changes
   const [prevPathname, setPrevPathname] = useState(pathname)
@@ -85,7 +83,6 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   const isAppScoped = pathname.startsWith('/apps/') && pathname !== '/apps/new'
   const activeAppId = isAppScoped ? pathname.split('/')[2] : null
   const currentApp = apps?.find((a) => a.id === activeAppId)
-  const currentTab = isAppScoped ? pathname.split('/')[3] ?? '' : ''
 
   const runningCount = apps?.filter((a) => a.state === 'running' || a.lastDeployment?.status === 'running').length ?? 0
   const totalAppsCount = apps?.length ?? 0
@@ -150,28 +147,6 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
     },
   ]
 
-  // The header names the current page. Inside an app it becomes a trail: Dashboard / App / Tab.
-  const activeNavItem = navGroups.flatMap((g) => g.items).find((i) => i.active)
-  const pageTitle = isAppScoped ? 'Apps' : activeNavItem?.label ?? 'Dashboard'
-  const tabLabels: Record<string, string> = {
-    '': 'Overview',
-    deployments: 'Deployments',
-    environment: 'Environment',
-    logs: 'Logs',
-    webhook: 'Deploy hook',
-    settings: 'Settings',
-  }
-  const currentTabLabel = tabLabels[currentTab] ?? currentTab
-
-  // Public access summary: live on a domain, tunnel down, or local only.
-  const publicState: { tone: 'live' | 'down' | 'local'; label: string; detail: string } | null = publicAccess
-    ? publicAccess.enabled && publicAccess.domain
-      ? publicAccess.connector === 'running'
-        ? { tone: 'live', label: publicAccess.domain, detail: `Public on ${publicAccess.domain}. Tunnel connector running.` }
-        : { tone: 'down', label: publicAccess.domain, detail: `Public access is on for ${publicAccess.domain} but the tunnel connector is ${publicAccess.connector}.` }
-      : { tone: 'local', label: 'Local only', detail: 'Apps are reachable on this machine only. Set up public access in Settings.' }
-    : null
-
   // Filter for search palette
   const filteredApps = (apps ?? []).filter((a) =>
     a.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -199,7 +174,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
       )}
 
       {/* The brand cell and the sidebar below it share one vertical line; the bar's bottom border
-          only spans the content area, so the two lines meet in a T rather than crossing. */}
+          only spans the content area. A soft, inset hairline under the logo separates it from the menu. */}
       <header className="sticky top-0 z-30 flex h-14 items-stretch bg-panel">
         <div
           className={cx(
@@ -208,6 +183,10 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
           )}
         >
           <Brand compact={collapsed} />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-3 bottom-0 h-px bg-linear-to-r from-transparent via-rule to-transparent"
+          />
           {/* Collapse toggle, straddling the sidebar's edge and centered on the header row. Desktop only. */}
           <button
             type="button"
@@ -221,7 +200,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
           </button>
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-between gap-4 border-b border-rule px-4 md:px-5">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
               type="button"
               className="rounded p-1 text-ink-soft hover:bg-paper md:hidden"
@@ -230,70 +209,22 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
             >
               <IconMenu className="size-5" />
             </button>
-            <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-xs text-ink-soft">
-              {isAppScoped ? (
-                <>
-                  <Link to="/" className="font-medium hover:text-ink">Apps</Link>
-                  <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
-                  {currentApp ? (
-                    <>
-                      <Link
-                        to={`/apps/${currentApp.id}`}
-                        className={cx('truncate', currentTab ? 'font-medium hover:text-ink' : 'font-semibold text-ink')}
-                      >
-                        {currentApp.name}
-                      </Link>
-                      {currentTab && (
-                        <>
-                          <IconChevronRight className="size-3 shrink-0 text-ink-soft/50" />
-                          <span className="truncate font-semibold text-ink">{currentTabLabel}</span>
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    <span className="h-3 w-24 animate-pulse rounded bg-rule" aria-hidden="true" />
-                  )}
-                </>
-              ) : (
-                <span className="truncate text-[13px] font-semibold text-ink">{pageTitle}</span>
-              )}
-            </nav>
-            {publicState && (
-              <Link
-                to="/settings"
-                title={publicState.detail}
-                className="hidden shrink-0 items-center gap-1.5 rounded-full border border-rule bg-paper/70 py-0.5 pr-2.5 pl-2 text-[11px] font-medium text-ink-soft transition-colors hover:border-slate-300 hover:text-ink lg:inline-flex"
-              >
-                <span
-                  className={cx(
-                    'size-1.5 rounded-full',
-                    publicState.tone === 'live' && 'bg-starboard',
-                    publicState.tone === 'down' && 'bg-warn',
-                    publicState.tone === 'local' && 'bg-ink-soft/40',
-                  )}
-                  aria-hidden="true"
-                />
-                <span className="max-w-48 truncate">{publicState.label}</span>
-              </Link>
-            )}
-          </div>
-          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              className="hidden items-center gap-2 rounded-md border border-rule bg-paper/70 px-3 py-1.5 text-xs text-ink-soft transition-colors hover:border-slate-300 hover:text-ink sm:inline-flex"
+              className="hidden w-full max-w-md items-center gap-2 rounded-md border border-rule bg-paper/70 px-3 py-1.5 text-xs text-ink-soft transition-colors hover:border-slate-300 hover:text-ink sm:inline-flex"
             >
-              <IconSearch className="size-3.5" />
-              <span>Search apps & tools…</span>
+              <IconSearch className="size-3.5 shrink-0" />
+              <span className="flex-1 truncate text-left">Search apps & tools…</span>
               <kbd className="rounded border border-rule bg-panel px-1.5 py-0.5 font-mono text-[10px] text-ink-soft">⌘K</kbd>
             </button>
-            <Link to="/apps/new">
-              <Button variant="primary" size="sm" className="gap-1.5">
-                <IconPlus className="size-3.5" />
-                <span>New App</span>
-              </Button>
-            </Link>
           </div>
+          <Link to="/apps/new" className="shrink-0">
+            <Button variant="primary" size="sm" className="gap-1.5">
+              <IconPlus className="size-3.5" />
+              <span>New App</span>
+            </Button>
+          </Link>
         </div>
       </header>
 

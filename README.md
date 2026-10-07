@@ -5,6 +5,8 @@ file and get an address for it: a local one out of the box, or a public HTTPS
 address on your own domain once you connect Cloudflare. Push to GitHub and the
 new version deploys itself.
 
+![Dockyard dashboard showing the overview cards and the list of deployed apps](docs/dashboard.png)
+
 ```
 GitHub Actions ── build & push ──▶ ghcr.io / Docker Hub
       │
