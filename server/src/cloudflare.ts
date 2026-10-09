@@ -1,6 +1,6 @@
 import { config } from './config.js';
-import { sha256Hex } from './crypto.js';
-import { connectorState, startConnector, stopConnector, waitForConnector } from './docker.js';
+import { randomId, sha256Hex } from './crypto.js';
+import { connectorId, connectorState, startConnector, stopConnector, waitForConnector } from './docker.js';
 import { badRequest } from './errors.js';
 import { completeOnboarding, publicAccess, savePublicAccess, type PublicAccess } from './site.js';
 
@@ -15,7 +15,6 @@ export interface SetupResult {
   steps: Step[];
 }
 
-const TUNNEL_NAME = 'dockyard';
 const HOOK_RULE = 'Dockyard: let deploy hooks through Super Bot Fight Mode';
 const DOMAIN = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
 const ZONE_ID = /^[a-f0-9]{32}$/;
@@ -148,11 +147,25 @@ interface DnsRecord {
  * Does everything in Cloudflare with an API token: tunnel, routing, DNS, and letting deploy
  * hooks past bot protection. The API token is used for this call only and never stored.
  */
+interface Tunnel {
+  id: string;
+  name: string;
+  deleted_at?: string | null;
+  connections?: { client_id: string; opened_at?: string }[];
+}
+
+/** Connectors on a tunnel other than the one running on this machine, by Cloudflare's connector id. */
+function foreignConnectors(tunnel: Tunnel, ours: string | null): number {
+  return new Set((tunnel.connections ?? []).map((c) => c.client_id).filter((id) => id !== ours)).size;
+}
+
 export async function setupAutomatic(input: {
   apiToken: string;
   zoneId: string;
   replaceDns: boolean;
   disableBotFightMode: boolean;
+  /** Create a fresh tunnel even if one for this domain, or this install's previous one, exists. */
+  newTunnel: boolean;
 }): Promise<SetupResult> {
   const { apiToken, zoneId } = input;
   if (!apiToken) throw badRequest('Enter a Cloudflare API token.');
@@ -186,17 +199,52 @@ export async function setupAutomatic(input: {
     const account = zone.account.id;
     steps.push({ name: 'Find the domain', status: 'ok', detail: domain });
 
+    // One tunnel per Dockyard. Two installs on one tunnel would have Cloudflare split a domain's
+    // requests between both machines, so a tunnel that other connectors are using is never joined.
+    const previous = publicAccess();
     const tunnel = await must('Create the tunnel', async () => {
-      const existing = await cf<{ id: string }[]>(apiToken, 'GET', `/accounts/${account}/cfd_tunnel?name=${TUNNEL_NAME}&is_deleted=false`);
-      if (existing[0]) return { id: existing[0].id, reused: true };
-      const created = await cf<{ id: string }>(apiToken, 'POST', `/accounts/${account}/cfd_tunnel`, { name: TUNNEL_NAME, config_src: 'cloudflare' });
-      return { id: created.id, reused: false };
+      const ours = await connectorId();
+      const shared = (t: Tunnel) => {
+        const n = foreignConnectors(t, ours);
+        return n === 0
+          ? null
+          : new Error(
+              `The tunnel "${t.name}" already has ${n} other connector${n === 1 ? '' : 's'} attached, so another Dockyard or cloudflared is using it. ` +
+                'Sharing it would send some of this domain\'s requests to that machine. Tick "Use a separate tunnel" and run the setup again.',
+            );
+      };
+      const byName = `dockyard-${domain}`;
+
+      if (!input.newTunnel) {
+        // The tunnel this install already uses, as long as it still exists and is not shared.
+        if (previous?.tunnelId) {
+          const own = await cf<Tunnel>(apiToken, 'GET', `/accounts/${account}/cfd_tunnel/${previous.tunnelId}`).catch(() => null);
+          if (own && !own.deleted_at) {
+            const problem = shared(own);
+            if (problem) throw problem;
+            return { ...own, reused: true };
+          }
+        }
+        // Otherwise one named for this domain, if nobody else is on it.
+        const existing = await cf<Tunnel[]>(apiToken, 'GET', `/accounts/${account}/cfd_tunnel?name=${encodeURIComponent(byName)}&is_deleted=false`);
+        if (existing[0]) {
+          const problem = shared(existing[0]);
+          if (problem) throw problem;
+          return { ...existing[0], reused: true };
+        }
+      }
+
+      const taken = await cf<Tunnel[]>(apiToken, 'GET', `/accounts/${account}/cfd_tunnel?name=${encodeURIComponent(byName)}&is_deleted=false`);
+      const name = taken[0] ? `${byName}-${randomId(4)}` : byName;
+      const created = await cf<Tunnel>(apiToken, 'POST', `/accounts/${account}/cfd_tunnel`, { name, config_src: 'cloudflare' });
+      return { ...created, name, reused: false };
     });
     steps.push({
       name: 'Create the tunnel',
       status: 'ok',
-      detail: tunnel.reused ? `Reusing your existing tunnel "${TUNNEL_NAME}".` : `Created the tunnel "${TUNNEL_NAME}".`,
+      detail: tunnel.reused ? `Reusing your tunnel "${tunnel.name}".` : `Created the tunnel "${tunnel.name}".`,
     });
+    const movedTunnels = previous?.tunnelId !== undefined && previous.tunnelId !== tunnel.id;
 
     const wildcard = `*.${domain}`;
     await must('Route the domain to Dockyard', async () => {
@@ -221,8 +269,11 @@ export async function setupAutomatic(input: {
       // A record for the dashboard's own name would win over the wildcard, so it has to point here too.
       const dashboardRecords = await lookup(dashboard);
       const inTheWay = [...wildcardRecords, ...dashboardRecords].filter((record) => !isOurs(record));
-      if (inTheWay.length && !input.replaceDns) {
-        const list = inTheWay.map((record) => `${record.name} (${record.type} to ${record.content})`).join(', ');
+      // Moving to a new tunnel: records that point at the old tunnel are expected and get replaced.
+      const pointsAtATunnel = (record: DnsRecord) => record.type === 'CNAME' && record.content.endsWith('.cfargotunnel.com');
+      const blocking = inTheWay.filter((record) => !(input.replaceDns || (movedTunnels && pointsAtATunnel(record))));
+      if (blocking.length) {
+        const list = blocking.map((record) => `${record.name} (${record.type} to ${record.content})`).join(', ');
         throw new Error(`These DNS records point somewhere else: ${list}. Tick "Replace existing DNS records" to point them at Dockyard instead.`);
       }
       for (const record of inTheWay) await cf(apiToken, 'DELETE', `/zones/${zoneId}/dns_records/${record.id}`);
@@ -234,6 +285,20 @@ export async function setupAutomatic(input: {
       }
     });
     steps.push({ name: 'Point DNS at the tunnel', status: 'ok', detail: `${wildcard} is proxied through Cloudflare to the tunnel.` });
+
+    if (movedTunnels && previous?.tunnelId) {
+      const old = previous.tunnelId;
+      await tryTo('Remove this domain from the old tunnel', async () => {
+        type Ingress = { hostname?: string; service: string };
+        const path = `/accounts/${account}/cfd_tunnel/${old}/configurations`;
+        const current = await cf<{ config?: { ingress?: Ingress[] } | null }>(apiToken, 'GET', path);
+        const rules = current?.config?.ingress ?? [];
+        if (!rules.some((rule) => rule.hostname === wildcard)) return 'It had no route for this domain.';
+        const ingress = rules.filter((rule) => rule.hostname && rule.hostname !== wildcard);
+        await cf(apiToken, 'PUT', path, { config: { ...(current?.config ?? {}), ingress: [...ingress, { service: 'http_status:404' }] } });
+        return `${wildcard} no longer routes through the tunnel this Dockyard used before.`;
+      });
+    }
 
     // GitHub Actions calls the deploy hooks from data-centre addresses, which bot protection tends to challenge.
     await tryTo('Let deploy hooks past Super Bot Fight Mode', async () => {

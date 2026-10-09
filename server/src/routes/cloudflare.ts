@@ -37,12 +37,13 @@ export async function cloudflareRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post('/api/cloudflare/setup', async (req) => {
-    const body = (req.body ?? {}) as { apiToken?: unknown; zoneId?: unknown; replaceDns?: unknown; disableBotFightMode?: unknown };
+    const body = (req.body ?? {}) as { apiToken?: unknown; zoneId?: unknown; replaceDns?: unknown; disableBotFightMode?: unknown; newTunnel?: unknown };
     const result = await setupAutomatic({
       apiToken: String(body.apiToken ?? '').trim(),
       zoneId: String(body.zoneId ?? '').trim(),
       replaceDns: body.replaceDns === true,
       disableBotFightMode: body.disableBotFightMode === true,
+      newTunnel: body.newTunnel === true,
     });
     return { ...result, status: await status() };
   });

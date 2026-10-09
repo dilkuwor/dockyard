@@ -231,6 +231,12 @@ export async function startConnector(token: string, tokenId: string): Promise<st
   return res.code === 0 ? null : lastLine(res.stderr);
 }
 
+/** The id Cloudflare knows the running connector by, or null when none is running. It is only in the connector's log. */
+export async function connectorId(): Promise<string | null> {
+  const res = await run(['logs', '--tail', '200', CONNECTOR]);
+  return /Generated Connector ID: ([0-9a-f-]{36})/.exec(res.stdout + res.stderr)?.[1] ?? null;
+}
+
 /** Stops gracefully first, so the connector can tell Cloudflare it is leaving instead of dropping requests. */
 export async function stopConnector(): Promise<void> {
   await run(['stop', '-t', '10', CONNECTOR]);

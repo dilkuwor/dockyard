@@ -79,10 +79,10 @@ Your domain must already be on Cloudflare. Then, on the first-run screen or unde
    - Zone · Bot Management · Edit (optional)
 2. Paste it, pick the domain, and start the setup.
 
-Dockyard then creates the tunnel, routes `*.yourdomain` to it, adds the wildcard
-DNS record, adds a WAF rule so deploy hooks get past Super Bot Fight Mode, starts
-the connector, and checks that the public address answers. Each step is reported.
-The API token is used once and is not stored.
+Dockyard then creates a tunnel named `dockyard-yourdomain`, routes `*.yourdomain`
+to it, adds the wildcard DNS record, adds a WAF rule so deploy hooks get past Super
+Bot Fight Mode, starts the connector, and checks that the public address answers.
+Each step is reported. The API token is used once and is not stored.
 
 Apps are then served at `https://<name>.yourdomain` and the dashboard at
 `https://dockyard.yourdomain`. The local addresses keep working.
@@ -94,6 +94,10 @@ Good to know:
 - **Turning it off** stops the connector and switches addresses back to local ones.
   The settings are kept, so it can be switched back on without Cloudflare. The
   tunnel and DNS record stay in your Cloudflare account.
+- **One tunnel per Dockyard.** If two installs share a tunnel, Cloudflare sends
+  some of each domain's requests to the wrong machine, which shows up as random
+  502s. Setup therefore refuses to join a tunnel that another machine is connected
+  to; tick "Use a separate tunnel" to get one of your own and move the DNS record.
 - **One subdomain level.** Cloudflare's free certificate covers `abc.example.com`
   but not `abc.apps.example.com`.
 - **Bot Fight Mode (free plan)** can block GitHub from calling deploy hooks and

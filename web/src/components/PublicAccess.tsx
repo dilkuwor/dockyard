@@ -44,6 +44,7 @@ export function PublicAccessSetup({ onChange }: { onChange: (result: SetupResult
   const [zoneId, setZoneId] = useState('')
   const [replaceDns, setReplaceDns] = useState(false)
   const [disableBotFightMode, setDisableBotFightMode] = useState(false)
+  const [newTunnel, setNewTunnel] = useState(false)
   const [domain, setDomain] = useState('')
   const [tunnelToken, setTunnelToken] = useState('')
   const [busy, setBusy] = useState<'check' | 'setup' | null>(null)
@@ -76,7 +77,7 @@ export function PublicAccessSetup({ onChange }: { onChange: (result: SetupResult
     try {
       const result =
         mode === 'automatic'
-          ? await api.cloudflareSetup({ apiToken, zoneId, replaceDns, disableBotFightMode })
+          ? await api.cloudflareSetup({ apiToken, zoneId, replaceDns, disableBotFightMode, newTunnel })
           : await api.cloudflareManual({ domain, tunnelToken })
       setSteps(result.steps)
       if (result.ok) {
@@ -191,6 +192,16 @@ export function PublicAccessSetup({ onChange }: { onChange: (result: SetupResult
                   <span className="block text-xs text-ink-soft">
                     On Cloudflare's free plan, Bot Fight Mode can block GitHub from calling deploy hooks and cannot be skipped for one
                     address. On paid plans, Dockyard adds a skip rule for Super Bot Fight Mode instead and this is not needed.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={newTunnel} onChange={(e) => setNewTunnel(e.target.checked)} className="mt-0.5 size-4 accent-ink" />
+                <span>
+                  Use a separate tunnel
+                  <span className="block text-xs text-ink-soft">
+                    Each Dockyard needs its own Cloudflare tunnel. Setup refuses to join a tunnel that another machine is connected to; tick
+                    this to create a new one for this domain and move the DNS record to it.
                   </span>
                 </span>
               </label>

@@ -199,7 +199,7 @@ export const api = {
 
   cloudflare: () => request<PublicAccessStatus>('GET', '/api/cloudflare'),
   cloudflareZones: (apiToken: string) => request<{ id: string; name: string }[]>('POST', '/api/cloudflare/zones', { apiToken }),
-  cloudflareSetup: (body: { apiToken: string; zoneId: string; replaceDns: boolean; disableBotFightMode: boolean }) =>
+  cloudflareSetup: (body: { apiToken: string; zoneId: string; replaceDns: boolean; disableBotFightMode: boolean; newTunnel?: boolean }) =>
     request<SetupResult>('POST', '/api/cloudflare/setup', body),
   cloudflareManual: (body: { domain: string; tunnelToken: string }) => request<SetupResult>('POST', '/api/cloudflare/manual', body),
   cloudflareDisable: () => request<PublicAccessStatus>('POST', '/api/cloudflare/disable'),
