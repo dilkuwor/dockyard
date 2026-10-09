@@ -15,11 +15,15 @@ import {
 } from '../components/Icons'
 import { formatBytes, timeAgo, useResource } from '../lib'
 
-/** "ghcr.io/owner/" on one line and "name:tag" on the next, so long image names stay readable. */
+/**
+ * "ghcr.io/owner/" on one line and "name:tag" on the next, so long image names stay readable.
+ * A digest is cut to its first twelve characters, the way Docker itself shows them.
+ */
 function splitImage(image: string | null): [string, string] | null {
   if (!image) return null
   const cut = image.lastIndexOf('/')
-  return cut === -1 ? ['', image] : [image.slice(0, cut + 1), image.slice(cut + 1)]
+  const name = (cut === -1 ? image : image.slice(cut + 1)).replace(/@sha256:([0-9a-f]{12})[0-9a-f]+$/, '@sha256:$1…')
+  return [cut === -1 ? '' : image.slice(0, cut + 1), name]
 }
 
 export default function AppsPage() {
