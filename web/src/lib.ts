@@ -1,5 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+const THEME_KEY = 'dockyard.theme'
+export type Theme = 'light' | 'dark'
+
+/** The theme index.html applied before the first paint, or the system preference. */
+export function currentTheme(): Theme {
+  const applied = document.documentElement.dataset.theme
+  if (applied === 'dark' || applied === 'light') return applied
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+/** Light or dark, remembered per browser. Toggling applies it to the page at once. */
+export function useTheme(): [Theme, () => void] {
+  const [theme, setTheme] = useState<Theme>(currentTheme)
+  const toggle = useCallback(() => {
+    setTheme((t) => {
+      const next: Theme = t === 'dark' ? 'light' : 'dark'
+      document.documentElement.dataset.theme = next
+      try {
+        localStorage.setItem(THEME_KEY, next)
+      } catch {
+        // Private windows may refuse storage; the theme still applies for this page.
+      }
+      return next
+    })
+  }, [])
+  return [theme, toggle]
+}
+
 export function cx(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(' ')
 }

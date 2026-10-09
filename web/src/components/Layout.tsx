@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { api } from '../api'
-import { cx, useResource } from '../lib'
+import { cx, useResource, useTheme } from '../lib'
 import { Button, Logo } from './ui'
 import {
   IconApps,
@@ -16,8 +16,11 @@ import {
   IconMenu,
   IconX,
   IconLogout,
+  IconKey,
   IconChevronRight,
   IconChevronLeft,
+  IconMoon,
+  IconSun,
   IconTerminal,
 } from './Icons'
 
@@ -57,7 +60,9 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [query, setQuery] = useState('')
 
-  const { data: apps } = useResource(api.listApps, [], 8000)
+  const { data: apps, error: appsError } = useResource(api.listApps, [], 8000)
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [theme, toggleTheme] = useTheme()
 
   // Close mobile drawer on route changes
   const [prevPathname, setPrevPathname] = useState(pathname)
@@ -227,12 +232,70 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
               <kbd className="rounded border border-rule bg-panel px-1.5 py-0.5 font-mono text-[10px] text-ink-soft">⌘K</kbd>
             </button>
           </div>
-          <Link to="/apps/new" className="shrink-0">
-            <Button variant="primary" size="sm" className="gap-1.5">
-              <IconPlus className="size-3.5" />
-              <span>New App</span>
-            </Button>
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            <Link to="/apps/new">
+              <Button variant="primary" size="sm" className="gap-1.5">
+                <IconPlus className="size-3.5" />
+                <span>New Application</span>
+              </Button>
+            </Link>
+
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              title={theme === 'dark' ? 'Light theme' : 'Dark theme'}
+              className="inline-flex size-8 items-center justify-center rounded-md text-ink-soft transition-colors hover:bg-paper hover:text-ink"
+            >
+              {theme === 'dark' ? <IconSun className="size-4.5" /> : <IconMoon className="size-4.5" />}
+            </button>
+            {/* Account menu */}
+            <div className="relative ml-1">
+              <button
+                type="button"
+                onClick={() => setAccountOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={accountOpen}
+                aria-label="Account"
+                title="Admin"
+                className={cx(
+                  'flex size-8 items-center justify-center rounded-full bg-accent text-sm font-bold text-white shadow-xs ring-2 ring-transparent transition-shadow hover:ring-accent/40',
+                  accountOpen && 'ring-accent/60',
+                )}
+              >
+                A
+              </button>
+              {accountOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setAccountOpen(false)} />
+                  <div role="menu" className="absolute right-0 z-20 mt-2 w-52 overflow-hidden rounded-lg border border-rule bg-panel py-1 shadow-lg">
+                    <div className="border-b border-rule px-3 py-2">
+                      <div className="text-xs font-semibold text-ink">Admin</div>
+                      <div className="text-[11px] text-ink-soft">Administrator · {window.location.hostname}</div>
+                    </div>
+                    <Link
+                      to="/settings"
+                      role="menuitem"
+                      onClick={() => setAccountOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-ink hover:bg-paper"
+                    >
+                      <IconKey className="size-3.5 text-ink-soft" />
+                      Change password
+                    </Link>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={onSignOut}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-ink hover:bg-paper"
+                    >
+                      <IconLogout className="size-3.5 text-ink-soft" />
+                      Sign out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </header>
 
@@ -302,16 +365,16 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
                         'flex items-center justify-between rounded-md px-2.5 py-1.75 text-sm font-medium transition-colors',
                         collapsed && 'md:justify-center md:px-0',
                         item.active
-                          ? 'bg-ink/8 text-ink font-semibold'
+                          ? 'bg-accent/10 text-accent font-semibold'
                           : 'text-ink-soft hover:bg-ink/4 hover:text-ink',
                       )}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <Icon className={cx('size-4 shrink-0', item.active ? 'text-ink' : 'text-ink-soft/80')} />
+                        <Icon className={cx('size-4 shrink-0', item.active ? 'text-accent' : 'text-ink-soft/80')} />
                         <span className={cx('truncate', collapsed && 'md:hidden')}>{item.label}</span>
                       </div>
                       {item.badge && (
-                        <span className={cx('rounded-full bg-ink/8 px-1.5 py-0.2 text-[11px] font-semibold tabular-nums text-ink-soft', collapsed && 'md:hidden')}>
+                        <span className={cx('rounded-full px-1.5 py-0.2 text-[11px] font-semibold tabular-nums', item.active ? 'bg-accent/15 text-accent' : 'bg-ink/8 text-ink-soft', collapsed && 'md:hidden')}>
                           {item.badge}
                         </span>
                       )}
@@ -323,24 +386,26 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
           ))}
         </div>
 
-        {/* Sidebar footer */}
-        <div className={cx('border-t border-rule bg-paper/50 p-3', collapsed && 'md:p-2')}>
-          <div className={cx('flex items-center justify-between gap-2', collapsed && 'md:justify-center')}>
-            <div className={cx('min-w-0', collapsed && 'md:hidden')}>
-              <p className="truncate text-xs font-semibold text-ink">Admin Session</p>
-              <p className="truncate text-[11px] text-ink-soft">Single Docker Host</p>
-            </div>
-            <button
-              type="button"
-              onClick={onSignOut}
-              title="Sign out"
-              aria-label="Sign out"
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-rule bg-panel px-2 py-1 text-xs font-medium text-ink-soft transition-colors hover:bg-paper hover:text-ink"
-            >
-              <IconLogout className="size-3.5" />
-              <span className={cx(collapsed && 'md:hidden')}>Out</span>
-            </button>
+        {/* Sidebar footer: host status. */}
+        <div className={cx('space-y-2 border-t border-rule p-3', collapsed && 'md:p-2')}>
+          <div
+            title={appsError ? 'Dockyard API unreachable' : 'Docker host online'}
+            className={cx(
+              'flex items-center gap-2.5 rounded-lg border px-3 py-2',
+              appsError ? 'border-port/25 bg-port/5' : 'border-starboard/25 bg-starboard/5',
+              collapsed && 'md:justify-center md:px-0',
+            )}
+          >
+            <span className={cx('size-2 shrink-0 rounded-full', appsError ? 'bg-port' : 'bg-starboard shadow-[0_0_8px] shadow-starboard/60')} />
+            <span className={cx('min-w-0 flex-1', collapsed && 'md:hidden')}>
+              <span className="flex items-center justify-between gap-2 text-xs font-semibold text-ink">
+                Docker Host
+                <span className={cx('font-medium', appsError ? 'text-port' : 'text-starboard')}>{appsError ? 'Offline' : 'Online'}</span>
+              </span>
+              <span className="block truncate text-[11px] text-ink-soft">{window.location.hostname}</span>
+            </span>
           </div>
+
         </div>
       </aside>
 

@@ -17,7 +17,7 @@ function Command({ children }: { children: string }) {
 function Step({ number, title, children }: { number: number; title: string; children: ReactNode }) {
   return (
     <li className="flex gap-4">
-      <span aria-hidden className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-semibold text-white">
+      <span aria-hidden className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-semibold text-paper">
         {number}
       </span>
       <div className="min-w-0 flex-1 space-y-2.5">
