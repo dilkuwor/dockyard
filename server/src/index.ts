@@ -33,6 +33,18 @@ server.addContentTypeParser('application/json', { parseAs: 'string' }, (req, bod
     done(new HttpError(400, 'Request body is not valid JSON.') as unknown as FastifyError, undefined);
   }
 });
+// Proxies such as Cloudflare forward a bodyless POST as "Transfer-Encoding: chunked" with no
+// content type. Fastify would answer 415 for that, so accept it and treat an empty body as {}.
+server.addContentTypeParser('*', { parseAs: 'string' }, (req, body, done) => {
+  (req as unknown as { rawBody: string }).rawBody = body as string;
+  if (!body) return done(null, {});
+  const text = body as string;
+  try {
+    done(null, JSON.parse(text));
+  } catch {
+    done(new HttpError(415, 'Send request bodies as application/json.') as unknown as FastifyError, undefined);
+  }
+});
 
 server.setErrorHandler((err: FastifyError | HttpError, req, reply) => {
   if (err instanceof HttpError) {

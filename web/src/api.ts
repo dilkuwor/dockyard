@@ -123,11 +123,14 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  // Mutations always carry a JSON body, even an empty one: proxies in front of a public Dockyard
+  // forward bodyless POSTs in a form the server would otherwise reject as 415.
+  const sendBody = body !== undefined || method !== 'GET'
   const res = await fetch(path, {
     method,
     credentials: 'same-origin',
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    headers: sendBody ? { 'Content-Type': 'application/json' } : undefined,
+    body: sendBody ? JSON.stringify(body ?? {}) : undefined,
   })
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
     window.dispatchEvent(new Event('dockyard:signed-out'))
