@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api } from '../api'
-import { AppAvatar, AppStatus, Bars, Button, Card, ErrorNote, MetricCard } from '../components/ui'
+import { AppAvatar, AppStatus, Button, Card, ErrorNote, MetricCard } from '../components/ui'
 import {
   IconApps,
   IconArrowRight,
@@ -41,15 +41,6 @@ export default function AppsPage() {
     .flatMap((a) => (a.lastDeployment ? [{ app: a, deployment: a.lastDeployment }] : []))
     .sort((a, b) => b.deployment.createdAt - a.deployment.createdAt)
   const latest = deployments[0]
-
-  // Sparklines: one bar per app, container, image or deployment, so the shape means something.
-  const appBars = (apps ?? []).slice(0, 8).map((a) => (a.state === 'running' ? 3 : a.state === 'partial' ? 2 : 1))
-  const containerBars = (apps ?? []).slice(0, 8).map((a) => (a.state === 'running' ? 3 : 0.6))
-  const imageBars = (unusedData?.images ?? []).slice(0, 8).map((i) => i.size)
-  const deployBars = deployments
-    .slice(0, 8)
-    .reverse()
-    .map((d) => (d.deployment.status === 'succeeded' ? 3 : d.deployment.status === 'failed' ? 1 : 2))
 
   // The clock in the heading, refreshed every half minute.
   const [now, setNow] = useState(() => new Date())
@@ -117,7 +108,6 @@ export default function AppsPage() {
             )
           }
           icon={<IconApps className="size-5" />}
-          chart={appBars.length > 0 ? <Bars values={appBars} tone="accent" /> : undefined}
           action={
             <Link to="/apps/new" className="inline-flex items-center gap-1.5 font-medium text-accent hover:underline">
               <IconPlus className="size-3.5" />
@@ -133,7 +123,6 @@ export default function AppsPage() {
           value={runningApps > 0 ? `${runningApps} Active` : 'Idle'}
           subtext="Docker socket proxy connected"
           icon={<IconBox className="size-5" />}
-          chart={containerBars.length > 0 ? <Bars values={containerBars} tone="ok" /> : undefined}
           action={
             <span className="inline-flex items-center gap-1.5 font-medium text-starboard">
               <span className="size-1.5 rounded-full bg-starboard" />
@@ -148,7 +137,6 @@ export default function AppsPage() {
           value={unusedData ? formatBytes(unusedData.totalBytes) : '0 B'}
           subtext={`${unusedData?.images.length ?? 0} unused image${(unusedData?.images.length ?? 0) === 1 ? '' : 's'}`}
           icon={<IconDatabase className="size-5" />}
-          chart={imageBars.length > 0 ? <Bars values={imageBars} tone="violet" /> : undefined}
           action={
             <Link to="/images" className="inline-flex items-center gap-1.5 font-medium text-accent hover:underline">
               Review and prune images
@@ -176,7 +164,6 @@ export default function AppsPage() {
             )
           }
           icon={<IconZap className="size-5" />}
-          chart={deployBars.length > 0 ? <Bars values={deployBars} tone="ember" /> : undefined}
           action={
             latest?.deployment.status === 'running' ? (
               <span className="font-medium text-accent animate-pulse">Build in progress…</span>

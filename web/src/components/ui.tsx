@@ -207,33 +207,11 @@ export function Section({ title, aside, children }: { title: string; aside?: Rea
 
 export type MetricTone = 'accent' | 'ok' | 'violet' | 'ember'
 
-const metricTones: Record<MetricTone, { tile: string; wash: string; bar: string }> = {
-  accent: { tile: 'bg-accent/12 text-accent', wash: 'from-accent/8', bar: 'fill-accent' },
-  ok: { tile: 'bg-starboard/12 text-starboard', wash: 'from-starboard/8', bar: 'fill-starboard' },
-  violet: { tile: 'bg-violet/12 text-violet', wash: 'from-violet/8', bar: 'fill-violet' },
-  ember: { tile: 'bg-ember/12 text-ember', wash: 'from-ember/8', bar: 'fill-ember' },
-}
-
-/** Tiny bar chart for a metric card: one bar per value, scaled to the tallest. */
-export function Bars({ values: given, tone = 'accent', className }: { values: number[]; tone?: MetricTone; className?: string }) {
-  // Fewer than six values are padded with empty slots on the left, so two bars still read as a chart.
-  const values = given.length < 6 ? [...Array<number>(6 - given.length).fill(0), ...given] : given
-  const max = Math.max(1, ...values)
-  const w = 5
-  const gap = 3
-  return (
-    <svg
-      aria-hidden
-      viewBox={`0 0 ${values.length * (w + gap) - gap} 24`}
-      className={cx('h-7 shrink-0', metricTones[tone].bar, className)}
-      style={{ width: `${(values.length * (w + gap) - gap) * 1.15}px` }}
-    >
-      {values.map((v, i) => {
-        const h = Math.max(3, Math.round((v / max) * 24))
-        return <rect key={i} x={i * (w + gap)} y={24 - h} width={w} height={h} rx="1.5" opacity={v === 0 ? 0.18 : 0.45 + (0.55 * v) / max} />
-      })}
-    </svg>
-  )
+const metricTones: Record<MetricTone, { tile: string; wash: string }> = {
+  accent: { tile: 'bg-accent/12 text-accent', wash: 'from-accent/8' },
+  ok: { tile: 'bg-starboard/12 text-starboard', wash: 'from-starboard/8' },
+  violet: { tile: 'bg-violet/12 text-violet', wash: 'from-violet/8' },
+  ember: { tile: 'bg-ember/12 text-ember', wash: 'from-ember/8' },
 }
 
 export function MetricCard({
@@ -242,7 +220,6 @@ export function MetricCard({
   subtext,
   icon,
   action,
-  chart,
   tone,
   className,
 }: {
@@ -251,8 +228,6 @@ export function MetricCard({
   subtext?: ReactNode
   icon?: ReactNode
   action?: ReactNode
-  /** Something small at the right of the value, such as <Bars />. */
-  chart?: ReactNode
   /** Colours the icon tile and gives the card a faint wash of the same colour. */
   tone?: MetricTone
   className?: string
@@ -268,13 +243,8 @@ export function MetricCard({
         )}
         <div className="min-w-0 flex-1">
           <div className="text-[11px] font-semibold tracking-wider text-ink-soft uppercase">{title}</div>
-          <div className="mt-0.5 flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xl font-semibold tracking-tight text-ink">{value}</div>
-              {subtext && <div className="mt-0.5 text-[13px] text-ink-soft">{subtext}</div>}
-            </div>
-            {chart}
-          </div>
+          <div className="mt-0.5 text-xl font-semibold tracking-tight text-ink">{value}</div>
+          {subtext && <div className="mt-0.5 text-[13px] text-ink-soft">{subtext}</div>}
         </div>
       </div>
       {action && <div className="mt-3 border-t border-rule/70 pt-2.5 text-xs">{action}</div>}
