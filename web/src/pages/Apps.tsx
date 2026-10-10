@@ -5,6 +5,8 @@ import { AppAvatar, AppStatus, Button, Card, ErrorNote, MetricCard } from '../co
 import {
   IconApps,
   IconArrowRight,
+  IconChevronLeft,
+  IconChevronRight,
   IconBox,
   IconDatabase,
   IconExternalLink,
@@ -32,6 +34,8 @@ export default function AppsPage() {
 
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'running' | 'stopped'>('all')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   const totalApps = apps?.length ?? 0
   const runningApps = apps?.filter((a) => a.state === 'running').length ?? 0
@@ -66,6 +70,20 @@ export default function AppsPage() {
     if (statusFilter === 'stopped') return app.state === 'stopped' || app.state === 'missing'
     return true
   })
+
+  // Pagination over the filtered list. The page clamps itself when a filter shrinks the list.
+  const pageCount = Math.max(1, Math.ceil(filteredApps.length / pageSize))
+  const currentPage = Math.min(page, pageCount)
+  const pageStart = (currentPage - 1) * pageSize
+  const pagedApps = filteredApps.slice(pageStart, pageStart + pageSize)
+  const changeFilter = (next: 'all' | 'running' | 'stopped') => {
+    setStatusFilter(next)
+    setPage(1)
+  }
+  const changeQuery = (next: string) => {
+    setQuery(next)
+    setPage(1)
+  }
 
   return (
     <div className="relative space-y-5">
@@ -198,7 +216,7 @@ export default function AppsPage() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setStatusFilter(tab.id)}
+                onClick={() => changeFilter(tab.id)}
                 className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   statusFilter === tab.id ? 'bg-panel font-semibold text-accent shadow-xs' : 'text-ink-soft hover:text-ink'
                 }`}
@@ -213,7 +231,7 @@ export default function AppsPage() {
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => changeQuery(e.target.value)}
               placeholder="Search by name, image, URL…"
               className="w-full rounded-md border border-rule bg-panel py-1.5 pr-3 pl-9 text-sm text-ink placeholder:text-ink-soft/60 focus:border-accent focus:ring-2 focus:ring-accent/15 focus:outline-none"
             />
@@ -258,7 +276,7 @@ export default function AppsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredApps.map((app) => {
+                  pagedApps.map((app) => {
                     const deploying = app.lastDeployment?.status === 'running' || app.lastDeployment?.status === 'queued'
                     const image = splitImage(app.image)
                     return (
@@ -339,6 +357,81 @@ export default function AppsPage() {
                 )}
               </tbody>
             </table>
+            {filteredApps.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule px-4 py-2.5 text-xs text-ink-soft">
+                <div className="flex items-center gap-3">
+                  <span>
+                    Showing {pageStart + 1}–{Math.min(pageStart + pageSize, filteredApps.length)} of {filteredApps.length}
+                  </span>
+                  <label className="flex items-center gap-1.5">
+                    <span>Per page</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value))
+                        setPage(1)
+                      }}
+                      className="rounded-md border border-rule bg-panel px-1.5 py-0.5 text-xs text-ink"
+                    >
+                      {[10, 25, 50].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {pageCount > 1 && (
+                  <nav aria-label="Pages" className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      aria-label="Previous page"
+                      className="inline-flex size-7 items-center justify-center rounded-md border border-rule bg-panel text-ink-soft hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <IconChevronLeft className="size-3.5" />
+                    </button>
+                    {Array.from({ length: pageCount }, (_, i) => i + 1)
+                      .filter((n) => n === 1 || n === pageCount || Math.abs(n - currentPage) <= 1)
+                      .reduce<(number | 'gap')[]>((acc, n) => {
+                        const prev = acc[acc.length - 1]
+                        if (typeof prev === 'number' && n - prev > 1) acc.push('gap')
+                        acc.push(n)
+                        return acc
+                      }, [])
+                      .map((n, i) =>
+                        n === 'gap' ? (
+                          <span key={`gap-${i}`} className="px-1">
+                            …
+                          </span>
+                        ) : (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setPage(n)}
+                            aria-current={n === currentPage ? 'page' : undefined}
+                            className={`inline-flex h-7 min-w-7 items-center justify-center rounded-md px-1.5 font-medium ${
+                              n === currentPage ? 'bg-accent/12 text-accent' : 'text-ink-soft hover:bg-paper hover:text-ink'
+                            }`}
+                          >
+                            {n}
+                          </button>
+                        ),
+                      )}
+                    <button
+                      type="button"
+                      onClick={() => setPage(currentPage + 1)}
+                      disabled={currentPage === pageCount}
+                      aria-label="Next page"
+                      className="inline-flex size-7 items-center justify-center rounded-md border border-rule bg-panel text-ink-soft hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <IconChevronRight className="size-3.5" />
+                    </button>
+                  </nav>
+                )}
+              </div>
+            )}
           </div>
         )}
       </Card>
