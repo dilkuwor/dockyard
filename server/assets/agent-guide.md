@@ -148,6 +148,7 @@ Every request needs `Authorization: Bearer $DOCKYARD_TOKEN`. Bodies and response
 | `GET /api/apps/:id/previews` | Preview apps created from this app's branches |
 | `GET` / `POST /api/apps/:id/addons` | Managed add-ons: `{type: "postgres" \| "redis" \| "minio"}` adds the service and its variables; `DELETE /api/apps/:id/addons/:type` removes them. Deploy afterwards |
 | `GET` / `POST /api/apps/:id/hostnames` | Custom hostnames: `{hostname: "www.example.com"}` routes it to the app (Cloudflare changes included); `DELETE /api/apps/:id/hostnames/:hostname` removes it. Takes effect without a deploy |
+| `PUT /api/apps/:id/primary-hostname` | `{hostname, redirect}`: present the app at that custom hostname (`url` changes), optionally redirecting its other addresses there; `{hostname: null}` goes back to the slug address |
 | `POST /api/apps/:id/github-secrets` | `{repo: "owner/name", reset?: boolean}`: store the hook secret in that GitHub repository with Dockyard's token. Answers `{configured: false}` without a token; otherwise `{secrets: {NAME: "added" \| "present" \| "updated"}}`. The repository must be the one the app's ghcr.io image is built from |
 | `GET /api/apps/:id/logs?tail=200` | Recent container logs (plain text) |
 | `POST /api/apps/:id/actions/{start,stop,restart}` | Control the containers |

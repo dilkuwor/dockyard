@@ -5,7 +5,7 @@ import { compose, writeComposeFile } from './docker.js';
 import { getServiceImage, renderCompose, setServiceImage } from './compose.js';
 import { notFound } from './errors.js';
 import { trackImages } from './images.js';
-import { appUrl } from './site.js';
+import { appAddress } from './site.js';
 
 const MAX_LOG = 200_000;
 const queues = new Map<string, Promise<void>>();
@@ -100,7 +100,7 @@ async function runDeployment(deploymentId: string): Promise<void> {
   db.prepare("UPDATE deployments SET status = 'running' WHERE id = ?").run(deploymentId);
 
   try {
-    log(`Deploying ${app.name} to ${appUrl(app.slug, app.domain)}`);
+    log(`Deploying ${app.name} to ${appAddress(app)}`);
     if (deployment.image) log(`Image: ${deployment.image}`);
 
     const rendered = renderCompose(deployment.compose, {
@@ -128,7 +128,7 @@ async function runDeployment(deploymentId: string): Promise<void> {
       Date.now(),
       app.id,
     );
-    log(`\nLive at ${appUrl(app.slug, app.domain)}`);
+    log(`\nLive at ${appAddress(app)}`);
     finish('succeeded');
   } catch (err) {
     log(`\nDeployment failed: ${(err as Error).message}`);

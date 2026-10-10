@@ -12,6 +12,24 @@ export default function Hostnames({ app, onChange }: { app: AppDetail; onChange:
   const [busy, setBusy] = useState<string | null>(null)
   const [actionError, setActionError] = useState<unknown>(null)
   const [steps, setSteps] = useState<SetupStep[]>([])
+  const [primary, setPrimary] = useState<string | null>(app.primaryHostname)
+  const [redirect, setRedirect] = useState(app.redirectToPrimary)
+  const [primaryBusy, setPrimaryBusy] = useState(false)
+
+  async function choosePrimary(hostname: string | null, nextRedirect: boolean) {
+    setPrimaryBusy(true)
+    setActionError(null)
+    try {
+      const result = await api.setPrimaryHostname(app.id, hostname, nextRedirect)
+      setPrimary(result.primaryHostname)
+      setRedirect(result.redirectToPrimary)
+      onChange()
+    } catch (err) {
+      setActionError(err)
+    } finally {
+      setPrimaryBusy(false)
+    }
+  }
 
   async function run(key: string, fn: () => Promise<{ ok: boolean; steps: SetupStep[]; hostnames: HostnameInfo[] }>) {
     setBusy(key)
@@ -59,6 +77,13 @@ export default function Hostnames({ app, onChange }: { app: AppDetail; onChange:
                 <IconExternalLink className="size-3 opacity-60" />
               </a>
               <div className="flex items-center gap-3">
+                {primary === h.hostname ? (
+                  <span className="rounded-full bg-accent/12 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-accent uppercase">Primary</span>
+                ) : (
+                  <Button size="sm" variant="quiet" className="text-xs" busy={primaryBusy} onClick={() => choosePrimary(h.hostname, redirect)}>
+                    Make primary
+                  </Button>
+                )}
                 <span className={`text-xs ${h.cloudflare === 'manual' ? 'font-medium text-warn' : 'text-ink-soft'}`}>
                   {h.cloudflare === 'managed'
                     ? 'DNS and route by Dockyard'
@@ -79,6 +104,25 @@ export default function Hostnames({ app, onChange }: { app: AppDetail; onChange:
             </li>
           ))}
         </ul>
+      )}
+
+      {primary && (
+        <div className="space-y-2 rounded-lg border border-rule bg-paper/50 px-4 py-3 text-xs">
+          <p className="text-ink">
+            This app is shown as <span className="font-mono">{primary}</span>. Its <span className="font-mono">{app.slugUrl.replace(/^https?:\/\//, '')}</span>{' '}
+            address keeps working.{' '}
+            <button type="button" className="font-medium text-accent hover:underline" disabled={primaryBusy} onClick={() => choosePrimary(null, false)}>
+              Use the {app.slug} address again
+            </button>
+          </p>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" checked={redirect} disabled={primaryBusy} onChange={(e) => choosePrimary(primary, e.target.checked)} className="mt-0.5 size-4 accent-ink" />
+            <span className="text-ink-soft">
+              Redirect the other addresses to it. Visitors of the {app.slug} address and any other hostname get a permanent redirect to{' '}
+              <span className="font-mono">{primary}</span>, so bookmarks and search engines settle on one name.
+            </span>
+          </label>
+        </div>
       )}
 
       <form onSubmit={add} className="flex flex-wrap items-center gap-2">

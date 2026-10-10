@@ -70,6 +70,11 @@ export function addressDomain(): string {
   return publicDomain() ?? `${config.localDomain}${localPortSuffix()}`;
 }
 
+/** The address an app is presented at: its primary custom hostname when it has one, else <slug>.<domain>. */
+export function appAddress(app: { slug: string; domain: string | null; primary_hostname: string | null }): string {
+  return app.primary_hostname && publicDomain() ? `https://${app.primary_hostname}` : appUrl(app.slug, app.domain);
+}
+
 /** Public HTTPS address when public access is on; otherwise the address on this machine. */
 export function appUrl(slug: string, domain?: string | null): string {
   const chosen = resolveDomain(domain);

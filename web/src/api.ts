@@ -87,6 +87,9 @@ export interface AppSummary {
   slug: string
   domain: string | null
   url: string
+  slugUrl: string
+  primaryHostname: string | null
+  redirectToPrimary: boolean
   hostnames: string[]
   addons: AddonType[]
   deployBranch: string | null
@@ -268,6 +271,8 @@ export const api = {
   hostnames: (id: string) => request<HostnameInfo[]>('GET', `/api/apps/${id}/hostnames`),
   addHostname: (id: string, hostname: string) =>
     request<SetupResult & { hostnames: HostnameInfo[] }>('POST', `/api/apps/${id}/hostnames`, { hostname }),
+  setPrimaryHostname: (id: string, hostname: string | null, redirect: boolean) =>
+    request<{ primaryHostname: string | null; redirectToPrimary: boolean }>('PUT', `/api/apps/${id}/primary-hostname`, { hostname, redirect }),
   removeHostname: (id: string, hostname: string) =>
     request<SetupResult & { hostnames: HostnameInfo[] }>('DELETE', `/api/apps/${id}/hostnames/${encodeURIComponent(hostname)}`),
   backups: () =>

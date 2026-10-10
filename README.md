@@ -216,7 +216,8 @@ tunnel: Dockyard adds a tunnel route and a proxied DNS record with the API token
 saved at setup, and Traefik starts routing the name at once through a file
 provider, so nothing is redeployed. A name that the wildcard of a configured
 domain already covers needs no Cloudflare change at all. The app's own address
-keeps working.
+keeps working. **Make primary** shows the app as that hostname everywhere, and
+the redirect switch sends the other addresses to it with a permanent redirect.
 
 ### Preview deployments
 

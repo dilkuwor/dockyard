@@ -65,6 +65,8 @@ export function findOrCreatePreview(parent: AppRow, branch: string, image: strin
     preview_of: parent.id,
     branch,
     backup_enabled: 0,
+    primary_hostname: null,
+    redirect_to_primary: 0,
     created_at: now,
     updated_at: now,
   };

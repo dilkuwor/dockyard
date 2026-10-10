@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { ADDONS, addAddon, addonsOf, parseAddonType, removeAddon } from '../addons.js';
 import { db, type AppRow } from '../db.js';
 import { notFound } from '../errors.js';
-import { addHostname, hostnameDetails, removeHostname } from '../hostnames.js';
+import { addHostname, hostnameDetails, removeHostname, setPrimaryHostname } from '../hostnames.js';
 
 function getApp(id: string): AppRow {
   const app = db.prepare('SELECT * FROM apps WHERE id = ?').get(id) as AppRow | undefined;
@@ -48,6 +48,16 @@ export async function extrasRoutes(app: FastifyInstance): Promise<void> {
     const result = await addHostname(row, (req.body as { hostname?: unknown } | undefined)?.hostname);
     reply.code(result.ok ? 201 : 200);
     return { ...result, hostnames: hostnameDetails(row.id) };
+  });
+
+  /** Which hostname the app is presented at, and whether its other addresses redirect there. */
+  app.put<{ Params: { id: string } }>('/api/apps/:id/primary-hostname', async (req) => {
+    const row = getApp(req.params.id);
+    const body = (req.body ?? {}) as { hostname?: unknown; redirect?: unknown };
+    const hostname = body.hostname === null || body.hostname === undefined || body.hostname === '' ? null : String(body.hostname).trim().toLowerCase();
+    setPrimaryHostname(row, hostname, body.redirect === true);
+    const updated = getApp(row.id);
+    return { primaryHostname: updated.primary_hostname, redirectToPrimary: updated.redirect_to_primary === 1 };
   });
 
   app.delete<{ Params: { id: string; hostname: string } }>('/api/apps/:id/hostnames/:hostname', async (req) => {

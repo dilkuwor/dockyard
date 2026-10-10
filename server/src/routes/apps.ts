@@ -12,7 +12,7 @@ import {
 } from '../docker.js';
 import { getServiceImage, imageCompose, parseCompose, validateCompose } from '../compose.js';
 import { appEnv, enqueueDeploy } from '../deployer.js';
-import { addressDomain, appUrl, configuredDomains, dashboardUrl, defaultDomain, publicAccess, publicDomain } from '../site.js';
+import { addressDomain, appAddress, appUrl, configuredDomains, dashboardUrl, defaultDomain, publicAccess, publicDomain } from '../site.js';
 import { badRequest, HttpError, notFound } from '../errors.js';
 import { generateSlug } from '../slug.js';
 import { globalHookEnabled } from './hooks.js';
@@ -85,7 +85,10 @@ function toDto(app: AppRow) {
     name: app.name,
     slug: app.slug,
     domain: app.domain,
-    url: appUrl(app.slug, app.domain),
+    url: appAddress(app),
+    slugUrl: appUrl(app.slug, app.domain),
+    primaryHostname: app.primary_hostname,
+    redirectToPrimary: app.redirect_to_primary === 1,
     hostnames: hostnamesOf(app.id),
     addons: addonsOf(app.id).map((a) => a.type),
     deployBranch: app.deploy_branch,
@@ -225,6 +228,8 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
       preview_of: null,
       branch: null,
       backup_enabled: 1,
+      primary_hostname: null,
+      redirect_to_primary: 0,
       created_at: now,
       updated_at: now,
     };

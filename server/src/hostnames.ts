@@ -6,7 +6,7 @@ import { config } from './config.js';
 import { db, type AppRow } from './db.js';
 import { badRequest } from './errors.js';
 import { projectName } from './docker.js';
-import { configuredDomains, publicAccess } from './site.js';
+import { configuredDomains, publicAccess, resolveDomain } from './site.js';
 import type { SetupResult } from './cloudflare.js';
 
 /**
@@ -44,24 +44,42 @@ const routeFile = (appId: string) => path.join(config.dynamicDir, `dy-${appId}.y
 /** Writes (or removes) the Traefik router for an app's hostnames. */
 export function writeHostnameRoutes(appId: string): void {
   if (!fs.existsSync(config.dynamicDir)) return; // older compose file without the shared directory
+  const app = db.prepare('SELECT * FROM apps WHERE id = ?').get(appId) as AppRow | undefined;
   const hostnames = hostnamesOf(appId);
   const file = routeFile(appId);
-  if (hostnames.length === 0) {
+  if (!app || hostnames.length === 0) {
     fs.rmSync(file, { force: true });
     return;
   }
   const router = `dy-${appId}`;
-  const doc = {
-    http: {
-      routers: {
-        [`${router}-hosts`]: {
-          rule: hostnames.map((h) => `Host(\`${h}\`)`).join(' || '),
-          entryPoints: [config.traefikEntrypoint],
-          service: `${router}@docker`,
-        },
-      },
-    },
-  };
+  const host = (h: string) => `Host(\`${h}\`)`;
+  const primary = app.primary_hostname && hostnames.includes(app.primary_hostname) ? app.primary_hostname : null;
+  const redirect = primary !== null && app.redirect_to_primary === 1;
+  const routers: Record<string, unknown> = {};
+  const middlewares: Record<string, unknown> = {};
+
+  // Every custom hostname reaches the app, unless it redirects to the primary one.
+  const served = redirect ? [primary!] : hostnames;
+  routers[`${router}-hosts`] = { rule: served.map(host).join(' || '), entryPoints: [config.traefikEntrypoint], service: `${router}@docker` };
+
+  if (redirect) {
+    // The slug address and the other hostnames answer with a permanent redirect to the primary name.
+    const publicDomain = resolveDomain(app.domain);
+    const others = [...hostnames.filter((h) => h !== primary), ...(publicDomain ? [`${app.slug}.${publicDomain}`] : [])];
+    routers[`${router}-redirect`] = {
+      rule: others.map(host).join(' || '),
+      entryPoints: [config.traefikEntrypoint],
+      service: `${router}@docker`,
+      middlewares: [`${router}-to-primary`],
+      // Above the docker-provider router for the slug address, which would otherwise serve it directly.
+      priority: 1000,
+    };
+    middlewares[`${router}-to-primary`] = {
+      redirectRegex: { regex: '^https?://[^/]+(.*)', replacement: `https://${primary}\${1}`, permanent: true },
+    };
+  }
+
+  const doc = { http: { routers, ...(Object.keys(middlewares).length ? { middlewares } : {}) } };
   fs.writeFileSync(file, YAML.stringify(doc));
 }
 
@@ -111,9 +129,25 @@ export async function removeHostname(app: AppRow, value: unknown): Promise<Setup
   const steps: SetupResult['steps'] = [];
   if (row.zone_id) steps.push(...(await detachHostname(hostname, row.zone_id)).steps);
   db.prepare('DELETE FROM hostnames WHERE hostname = ?').run(hostname);
+  if (app.primary_hostname === hostname) {
+    db.prepare('UPDATE apps SET primary_hostname = NULL, redirect_to_primary = 0, updated_at = ? WHERE id = ?').run(Date.now(), app.id);
+    steps.push({ name: 'Address', status: 'ok', detail: `${app.name} is shown at its ${app.slug} address again.` });
+  }
   writeHostnameRoutes(app.id);
   steps.push({ name: 'Route', status: 'ok', detail: `${hostname} no longer goes to ${app.name}.` });
   return { ok: true, steps };
+}
+
+/** Makes a custom hostname the app's address, or clears it with null; optionally redirects the other names to it. */
+export function setPrimaryHostname(app: AppRow, hostname: string | null, redirect: boolean): void {
+  if (hostname !== null && !hostnamesOf(app.id).includes(hostname)) throw badRequest('Add the hostname to this app first.');
+  db.prepare('UPDATE apps SET primary_hostname = ?, redirect_to_primary = ?, updated_at = ? WHERE id = ?').run(
+    hostname,
+    hostname !== null && redirect ? 1 : 0,
+    Date.now(),
+    app.id,
+  );
+  writeHostnameRoutes(app.id);
 }
 
 /**

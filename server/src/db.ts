@@ -126,6 +126,9 @@ addColumn('apps', 'preview_of', 'TEXT');
 addColumn('apps', 'branch', 'TEXT');
 // Whether the app's data is included in backups. Previews never are.
 addColumn('apps', 'backup_enabled', 'INTEGER NOT NULL DEFAULT 1');
+// A custom hostname shown as the app's address, and whether the other addresses redirect to it.
+addColumn('apps', 'primary_hostname', 'TEXT');
+addColumn('apps', 'redirect_to_primary', 'INTEGER NOT NULL DEFAULT 0');
 // Deploy notes: what the hook told us, and the environment as it was for this deployment.
 addColumn('deployments', 'commit_message', 'TEXT');
 addColumn('deployments', 'branch', 'TEXT');
@@ -148,6 +151,8 @@ export interface AppRow {
   preview_of: string | null;
   branch: string | null;
   backup_enabled: number;
+  primary_hostname: string | null;
+  redirect_to_primary: number;
   created_at: number;
   updated_at: number;
 }
