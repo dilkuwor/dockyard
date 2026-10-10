@@ -515,7 +515,7 @@ export async function removeDomain(domain: string, apiToken: string | undefined,
   if (domain === access.domain) throw badRequest('The dashboard\'s own domain cannot be removed. Use "Set up again" to change it.');
   const extra = access.extraDomains?.find((d) => d.domain === domain);
   if (!extra) throw badRequest('That domain is not configured.');
-  if (appsUsingIt > 0) throw badRequest(`${appsUsingIt} app${appsUsingIt === 1 ? ' uses' : 's use'} ${domain}. Move them to another domain first.`);
+  if (appsUsingIt > 0) throw badRequest(`${appsUsingIt} app${appsUsingIt === 1 ? ' uses' : 's use'} ${domain}. Move them to another domain, or remove their hostnames under it, first.`);
   const steps: Step[] = [];
   const token = apiToken?.trim() || access.apiToken;
 

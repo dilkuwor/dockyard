@@ -120,7 +120,7 @@ export default function Domains({
                   variant="quiet"
                   className="text-xs text-port hover:bg-port/10"
                   disabled={d.apps > 0}
-                  title={d.apps > 0 ? 'Move its apps to another domain first' : undefined}
+                  title={d.apps > 0 ? 'Move its apps to another domain, or remove their hostnames under it, first' : undefined}
                   onClick={() => setRemoving(d.domain)}
                 >
                   Remove

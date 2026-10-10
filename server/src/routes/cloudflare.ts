@@ -20,11 +20,16 @@ import { connectorState } from '../docker.js';
 import { appUrl, completeOnboarding, configuredDomains, dashboardUrl, defaultDomain, onboardingPending, publicAccess } from '../site.js';
 
 /** Apps assigned to a domain. Apps with no domain count towards the dashboard's. */
+/** Apps that depend on a domain: served under it as <slug>.<domain>, or through a custom hostname in it. */
 function appsOn(domain: string): number {
   const primary = publicAccess()?.domain;
   const row = db
-    .prepare(domain === primary ? 'SELECT COUNT(*) AS n FROM apps WHERE domain IS NULL OR domain = ?' : 'SELECT COUNT(*) AS n FROM apps WHERE domain = ?')
-    .get(domain) as { n: number };
+    .prepare(
+      `SELECT COUNT(*) AS n FROM apps
+       WHERE ${domain === primary ? 'domain IS NULL OR ' : ''}domain = @domain
+          OR id IN (SELECT app_id FROM hostnames WHERE hostname = @domain OR hostname LIKE @suffix)`,
+    )
+    .get({ domain, suffix: `%.${domain}` }) as { n: number };
   return row.n;
 }
 
