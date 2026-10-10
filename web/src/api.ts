@@ -263,6 +263,7 @@ export const api = {
 
   tokens: () => request<ApiToken[]>('GET', '/api/tokens'),
   createToken: (name: string) => request<ApiToken & { token: string }>('POST', '/api/tokens', { name }),
+  rollToken: (id: string) => request<ApiToken & { token: string }>('POST', `/api/tokens/${id}/roll`),
   deleteToken: (id: string) => request<{ ok: true }>('DELETE', `/api/tokens/${id}`),
 
   globalHook: () => request<GlobalHook>('GET', '/api/global-hook'),

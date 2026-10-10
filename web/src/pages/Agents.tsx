@@ -9,8 +9,10 @@ export default function AgentsPage() {
   const { data: tokens, error, reload } = useResource(api.tokens, [])
   const [name, setName] = useState('')
   const [created, setCreated] = useState<(ApiToken & { token: string }) | null>(null)
-  const [revoking, setRevoking] = useState<string | null>(null)
+  const [shownKind, setShownKind] = useState<'created' | 'rolled'>('created')
+  const [pending, setPending] = useState<{ id: string; action: 'revoke' | 'roll' } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [rolling, setRolling] = useState(false)
   const [actionError, setActionError] = useState<unknown>(null)
 
   async function create(e: FormEvent) {
@@ -19,6 +21,7 @@ export default function AgentsPage() {
     setActionError(null)
     try {
       setCreated(await api.createToken(name))
+      setShownKind('created')
       setName('')
       await reload()
     } catch (err) {
@@ -37,7 +40,22 @@ export default function AgentsPage() {
     } catch (err) {
       setActionError(err)
     } finally {
-      setRevoking(null)
+      setPending(null)
+    }
+  }
+
+  async function roll(id: string) {
+    setActionError(null)
+    setRolling(true)
+    try {
+      setCreated(await api.rollToken(id))
+      setShownKind('rolled')
+      await reload()
+    } catch (err) {
+      setActionError(err)
+    } finally {
+      setRolling(false)
+      setPending(null)
     }
   }
 
@@ -97,7 +115,11 @@ chmod +x ~/.local/bin/dockyard`
           <div className="rounded-lg border border-starboard/30 bg-starboard/5 p-4 space-y-2">
             <div className="flex items-center gap-2 text-xs font-semibold text-starboard">
               <IconCheck className="size-4" />
-              <span>Token created for “{created.name}”. Copy it now; it cannot be shown again.</span>
+              <span>
+                {shownKind === 'rolled'
+                  ? `New token for “${created.name}”. The previous one no longer works. Copy it now; it cannot be shown again.`
+                  : `Token created for “${created.name}”. Copy it now; it cannot be shown again.`}
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <code className="rounded-md border border-rule bg-panel px-3 py-1.5 font-mono text-xs text-ink break-all">
@@ -123,20 +145,32 @@ chmod +x ~/.local/bin/dockyard`
                       Created {timeAgo(t.createdAt)} · {t.lastUsedAt ? `last used ${timeAgo(t.lastUsedAt)}` : 'never used'}
                     </span>
                   </div>
-                  {revoking === t.id ? (
+                  {pending?.id === t.id ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-port">Revoke token?</span>
-                      <Button variant="danger" size="sm" onClick={() => revoke(t.id)}>
+                      <span className={pending.action === 'revoke' ? 'text-xs font-semibold text-port' : 'text-xs font-semibold text-ink'}>
+                        {pending.action === 'roll' ? 'Roll token? The current one stops working.' : 'Revoke token?'}
+                      </span>
+                      <Button
+                        variant={pending.action === 'revoke' ? 'danger' : 'primary'}
+                        size="sm"
+                        busy={pending.action === 'roll' && rolling}
+                        onClick={() => (pending.action === 'roll' ? roll(t.id) : revoke(t.id))}
+                      >
                         Confirm
                       </Button>
-                      <Button variant="quiet" size="sm" onClick={() => setRevoking(null)}>
+                      <Button variant="quiet" size="sm" disabled={rolling} onClick={() => setPending(null)}>
                         Cancel
                       </Button>
                     </div>
                   ) : (
-                    <Button size="sm" variant="quiet" className="text-xs text-port hover:bg-port/10" onClick={() => setRevoking(t.id)}>
-                      Revoke
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button size="sm" variant="quiet" className="text-xs" onClick={() => setPending({ id: t.id, action: 'roll' })}>
+                        Roll
+                      </Button>
+                      <Button size="sm" variant="quiet" className="text-xs text-port hover:bg-port/10" onClick={() => setPending({ id: t.id, action: 'revoke' })}>
+                        Revoke
+                      </Button>
+                    </div>
                   )}
                 </li>
               ))}

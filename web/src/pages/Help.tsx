@@ -43,7 +43,7 @@ const commands: [string, string][] = [
 const problems: [string, ReactNode][] = [
   ['command not found: dockyard', <>The folder <span className={mono}>~/.local/bin</span> is not on your PATH. Run the PATH command in step 3 and open a new terminal session.</>],
   ['DOCKYARD_URL is not set', <>The local configuration file is missing. Repeat step 1 to save config.</>],
-  ['the server did not accept DOCKYARD_TOKEN', <>The token was revoked or mistyped. Create a new one on the <Link to="/agents" className="text-accent hover:underline">Agent Access</Link> page and repeat step 1.</>],
+  ['the server did not accept DOCKYARD_TOKEN', <>The token was rolled, revoked, or mistyped. Roll it or create a new one on the <Link to="/agents" className="text-accent hover:underline">Agent Access</Link> page and repeat step 1.</>],
   ['missing required command: jq', <>Install <span className={mono}>jq</span> using Homebrew on macOS (<code className={mono}>brew install jq</code>) or apt on Linux.</>],
   ['run this inside the app\'s git repository', <>Navigate into your application directory first. It must be an active git repository with a GitHub remote named origin.</>],
   ['no Dockerfile at the repository root', <>Dockyard runs container images, so the repository needs a Dockerfile.</>],

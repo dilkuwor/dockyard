@@ -39,4 +39,13 @@ export async function tokenRoutes(app: FastifyInstance): Promise<void> {
     if (db.prepare('DELETE FROM tokens WHERE id = ?').run(req.params.id).changes === 0) throw notFound('Token');
     return { ok: true };
   });
+
+  // Replaces the secret and forgets the old one. The name stays, so agents keep their label.
+  app.post<{ Params: { id: string } }>('/api/tokens/:id/roll', async (req) => {
+    const existing = db.prepare('SELECT * FROM tokens WHERE id = ?').get(req.params.id) as TokenRow | undefined;
+    if (!existing) throw notFound('Token');
+    const token = newApiToken();
+    db.prepare('UPDATE tokens SET hash = ?, last_used_at = NULL WHERE id = ?').run(sha256Hex(token), existing.id);
+    return { ...toDto({ ...existing, last_used_at: null }), token };
+  });
 }

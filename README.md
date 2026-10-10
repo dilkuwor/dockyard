@@ -183,7 +183,7 @@ The `dockyard` command sets up the GitHub flow for a project in one step, and an
 agent such as Claude Code can run it for you.
 
 1. On the **Agent Access** page, create an access token. It is used instead of
-   the admin password and can be revoked at any time.
+   the admin password and can be rolled or revoked at any time.
 2. Install the command on the machine where you or the agent work. The **CLI &
    Docs** page has the commands, with this server's address filled in. It needs
    `git`, `curl` and `jq`.
