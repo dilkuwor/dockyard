@@ -16,6 +16,9 @@ import { addressDomain, appUrl, configuredDomains, dashboardUrl, defaultDomain, 
 import { badRequest, HttpError, notFound } from '../errors.js';
 import { generateSlug } from '../slug.js';
 import { globalHookEnabled } from './hooks.js';
+import { previewsOf, removePreviewApp } from '../previews.js';
+import { hostnamesOf } from '../hostnames.js';
+import { addonsOf } from '../addons.js';
 import { hasGithubToken } from '../github.js';
 import { DOCKER_HUB, hasCredentials } from '../registries.js';
 
@@ -36,9 +39,37 @@ function deploymentSummary(d: DeploymentRow | undefined) {
     trigger: d.trigger,
     image: d.image,
     commitSha: d.commit_sha,
+    commitMessage: d.commit_message,
+    branch: d.branch,
     rollbackOf: d.rollback_of,
     createdAt: d.created_at,
     finishedAt: d.finished_at,
+  };
+}
+
+/** Environment variable names only: values stay private, keys are enough to see what changed. */
+function envKeys(envEnc: string | null): Map<string, string> {
+  const vars = envEnc ? (JSON.parse(decrypt(envEnc)) as { key: string; value: string }[]) : [];
+  return new Map(vars.map((v) => [v.key, v.value]));
+}
+
+/** What changed between a deployment and the one before it: image, compose file and variables. */
+function deploymentDiff(d: DeploymentRow) {
+  const previous = db
+    .prepare('SELECT * FROM deployments WHERE app_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT 1')
+    .get(d.app_id, d.created_at) as DeploymentRow | undefined;
+  const before = envKeys(previous?.env_enc ?? null);
+  const after = envKeys(d.env_enc);
+  const env = {
+    added: [...after.keys()].filter((k) => !before.has(k)).sort(),
+    removed: [...before.keys()].filter((k) => !after.has(k)).sort(),
+    changed: [...after.keys()].filter((k) => before.has(k) && before.get(k) !== after.get(k)).sort(),
+  };
+  return {
+    previous: previous ? { id: previous.id, createdAt: previous.created_at, status: previous.status } : null,
+    image: { before: previous?.image ?? null, after: d.image },
+    compose: { before: previous?.compose ?? '', after: d.compose, changed: (previous?.compose ?? '') !== d.compose },
+    env,
   };
 }
 
@@ -55,6 +86,12 @@ function toDto(app: AppRow) {
     slug: app.slug,
     domain: app.domain,
     url: appUrl(app.slug, app.domain),
+    hostnames: hostnamesOf(app.id),
+    addons: addonsOf(app.id).map((a) => a.type),
+    deployBranch: app.deploy_branch,
+    previewsEnabled: app.previews_enabled === 1,
+    previewOf: app.preview_of,
+    branch: app.branch,
     sourceType: app.source_type,
     primaryService: app.primary_service,
     port: app.port,
@@ -79,6 +116,14 @@ function validPort(port: unknown): number {
 }
 
 const SLUG = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** A git branch name, or null to fall back to "main". */
+function validBranch(branch: unknown): string | null {
+  const value = String(branch ?? '').trim();
+  if (!value) return null;
+  if (value.length > 200 || /[\s~^:?*[\\]/.test(value)) throw badRequest('That does not look like a branch name.');
+  return value;
+}
 
 /** One of the configured public domains, or null for the dashboard's. Empty means "the default". */
 function validDomain(domain: unknown): string | null {
@@ -144,6 +189,8 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     const slug = String(body.slug ?? '').trim() ? validSlug(body.slug) : null;
     // Resolved now and stored, so a later change of the default domain only affects newer apps.
     const domain = publicAccess() ? validDomain(body.domain) : null;
+    const deployBranch = validBranch(body.deployBranch);
+    const previewsEnabled = body.previewsEnabled === true ? 1 : 0;
 
     let composeText: string;
     let primaryService: string;
@@ -172,14 +219,18 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
       hook_secret_enc: encrypt(newHookSecret()),
       current_deployment_id: null,
       domain,
+      deploy_branch: deployBranch,
+      previews_enabled: previewsEnabled,
+      preview_of: null,
+      branch: null,
       created_at: now,
       updated_at: now,
     };
     db.prepare(
       `INSERT INTO apps (id, name, slug, source_type, compose, primary_service, port, env_enc, hook_secret_enc,
-        current_deployment_id, domain, created_at, updated_at)
+        current_deployment_id, domain, deploy_branch, previews_enabled, preview_of, branch, created_at, updated_at)
        VALUES (@id, @name, @slug, @source_type, @compose, @primary_service, @port, @env_enc, @hook_secret_enc,
-        @current_deployment_id, @domain, @created_at, @updated_at)`,
+        @current_deployment_id, @domain, @deploy_branch, @previews_enabled, @preview_of, @branch, @created_at, @updated_at)`,
     ).run(row);
 
     if (body.deploy !== false) enqueueDeploy(row.id, { trigger: 'create' });
@@ -200,19 +251,24 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     const port = body.port !== undefined ? validPort(body.port) : row.port;
     const slug = body.slug !== undefined ? validSlug(body.slug, row.id) : row.slug;
     const domain = body.domain !== undefined ? validDomain(body.domain) : row.domain;
+    const deployBranch = body.deployBranch !== undefined ? validBranch(body.deployBranch) : row.deploy_branch;
+    const previewsEnabled = body.previewsEnabled !== undefined ? (body.previewsEnabled === true ? 1 : 0) : row.previews_enabled;
+    if (previewsEnabled === 1 && row.preview_of) throw badRequest('A preview cannot have previews of its own.');
     const composeText = body.compose !== undefined ? String(body.compose) : row.compose;
     const primaryService =
       body.primaryService !== undefined ? String(body.primaryService).trim() : row.primary_service;
 
     validateCompose(parseCompose(composeText), primaryService);
     db.prepare(
-      'UPDATE apps SET name = ?, slug = ?, domain = ?, port = ?, compose = ?, primary_service = ?, updated_at = ? WHERE id = ?',
-    ).run(name, slug, domain, port, composeText, primaryService, Date.now(), row.id);
+      'UPDATE apps SET name = ?, slug = ?, domain = ?, port = ?, compose = ?, primary_service = ?, deploy_branch = ?, previews_enabled = ?, updated_at = ? WHERE id = ?',
+    ).run(name, slug, domain, port, composeText, primaryService, deployBranch, previewsEnabled, Date.now(), row.id);
     return toDto(getApp(row.id));
   });
 
   app.delete<{ Params: { id: string }; Querystring: { volumes?: string } }>('/api/apps/:id', async (req) => {
     const row = getApp(req.params.id);
+    // Previews belong to their parent and go with it.
+    for (const preview of previewsOf(row.id)) await removePreviewApp(preview);
     const res = await compose.down(row.id, req.query.volumes === 'true');
     if (res.code !== 0) {
       throw new HttpError(500, 'Could not stop the app containers.', [res.stderr.trim()].filter(Boolean));
@@ -249,6 +305,20 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     const row = db.prepare('SELECT * FROM deployments WHERE id = ?').get(req.params.id) as DeploymentRow | undefined;
     if (!row) throw notFound('Deployment');
     return { ...deploymentSummary(row), log: row.log };
+  });
+
+  /** What changed in this deployment compared with the one before it. */
+  app.get<{ Params: { id: string } }>('/api/deployments/:id/diff', async (req) => {
+    const row = db.prepare('SELECT * FROM deployments WHERE id = ?').get(req.params.id) as DeploymentRow | undefined;
+    if (!row) throw notFound('Deployment');
+    return deploymentDiff(row);
+  });
+
+  /** The preview apps spun up from this app's branches. */
+  app.get<{ Params: { id: string } }>('/api/apps/:id/previews', async (req) => {
+    getApp(req.params.id);
+    const states = await projectStates();
+    return previewsOf(req.params.id).map((row) => ({ ...toDto(row), state: states.get(projectName(row.id)) ?? 'missing' }));
   });
 
   app.post<{ Params: { id: string } }>('/api/deployments/:id/rollback', async (req, reply) => {

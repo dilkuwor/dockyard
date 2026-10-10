@@ -1,5 +1,6 @@
+import { Link } from 'react-router'
 import { api, type AppDetail } from '../../api'
-import { Card, MetricCard, ProgressBar, Section } from '../../components/ui'
+import { AppStatus, Card, MetricCard, ProgressBar, Section } from '../../components/ui'
 import { cx, shortImage, timeAgo, useResource } from '../../lib'
 import { IconServer, IconActivity, IconTerminal, IconRocket } from '../../components/Icons'
 
@@ -53,6 +54,15 @@ export default function Overview({ app }: { app: AppDetail }) {
           icon={<IconRocket className="size-4" />}
         />
       </div>
+
+      {app.previewOf ? (
+        <p className="rounded-lg border border-accent/25 bg-accent/5 px-4 py-2.5 text-sm">
+          This is a preview of branch <span className="font-mono">{app.branch}</span>. It is removed when the branch is deleted on GitHub.{' '}
+          <Link to={`/apps/${app.previewOf}`} className="font-medium text-accent hover:underline">Open the main app</Link>
+        </p>
+      ) : app.previewsEnabled ? (
+        <Previews appId={app.id} />
+      ) : null}
 
       {/* Containers Telemetry Table */}
       <Section title="Containers & Resource Telemetry">
@@ -157,5 +167,39 @@ export default function Overview({ app }: { app: AppDetail }) {
         )}
       </Section>
     </div>
+  )
+}
+
+
+/** The preview apps spun up from this app's other branches. */
+function Previews({ appId }: { appId: string }) {
+  const { data: previews } = useResource(() => api.previews(appId), [appId], 8000)
+  return (
+    <Section title="Preview deployments">
+      {!previews || previews.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-rule bg-panel px-5 py-6 text-sm text-ink-soft">
+          No previews right now. Push a branch other than the deploy branch and it appears here with its own address.
+        </p>
+      ) : (
+        <Card className="divide-y divide-rule overflow-hidden">
+          {previews.map((p) => (
+            <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-sm">
+              <div className="min-w-0">
+                <Link to={`/apps/${p.id}`} className="font-semibold text-ink hover:text-accent">
+                  <span className="font-mono">{p.branch}</span>
+                </Link>
+                <a href={p.url} target="_blank" rel="noreferrer" className="ml-3 font-mono text-xs text-ink-soft hover:text-accent hover:underline">
+                  {p.url.replace(/^https?:\/\//, '')}
+                </a>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-ink-soft">
+                <AppStatus state={p.state ?? 'missing'} />
+                {p.lastDeployment && <span>{timeAgo(p.lastDeployment.createdAt)}</span>}
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+    </Section>
   )
 }

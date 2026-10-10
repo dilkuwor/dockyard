@@ -1,6 +1,7 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getServiceImage } from '../compose.js';
-import { dashboardUrl } from '../site.js';
+import { appUrl, dashboardUrl } from '../site.js';
+import { findOrCreatePreview, removePreview } from '../previews.js';
 import { decrypt, encrypt, hmacHex, newHookSecret, safeEqual } from '../crypto.js';
 import { db, getSetting, setSetting, type AppRow } from '../db.js';
 import { enqueueDeploy } from '../deployer.js';
@@ -40,9 +41,20 @@ function verifySignature(req: FastifyRequest, secret: string): void {
   if (!signature || !safeEqual(signature, expected)) throw new HttpError(401, 'Invalid signature.');
 }
 
-/** Body: { "image": "user/app", "digest": "sha256:…", "commit": "abc123" } */
-function parseDeploy(payload: unknown): { image?: string; commitSha?: string } {
-  const body = (payload ?? {}) as { image?: string; digest?: string; commit?: string };
+export interface HookPayload {
+  image?: string;
+  commitSha?: string;
+  commitMessage?: string;
+  branch?: string;
+  /** "branch-deleted" tears down that branch's preview instead of deploying. */
+  event?: 'branch-deleted';
+}
+
+const BRANCH = /^[^\s~^:?*[\\]{1,200}$/;
+
+/** Body: { "image": "user/app", "digest": "sha256:…", "commit": "abc123", "message": "…", "branch": "main", "event"?: "branch-deleted" } */
+function parseDeploy(payload: unknown): HookPayload {
+  const body = (payload ?? {}) as { image?: string; digest?: string; commit?: string; message?: string; branch?: string; event?: string };
   let image: string | undefined;
   if (body.image !== undefined) {
     if (typeof body.image !== 'string' || !IMAGE.test(body.image)) throw badRequest('"image" is not a valid image name.');
@@ -57,10 +69,52 @@ function parseDeploy(payload: unknown): { image?: string; commitSha?: string } {
     }
   }
   const commitSha = typeof body.commit === 'string' && COMMIT.test(body.commit) ? body.commit : undefined;
-  return { image, commitSha };
+  const commitMessage = typeof body.message === 'string' && body.message.trim() ? body.message.trim().slice(0, 500) : undefined;
+  const branch = typeof body.branch === 'string' && BRANCH.test(body.branch) ? body.branch : undefined;
+  const event = body.event === 'branch-deleted' ? 'branch-deleted' : undefined;
+  return { image, commitSha, commitMessage, branch, event };
 }
 
 const globalHookUrl = () => `${dashboardUrl()}/api/hooks`;
+
+/**
+ * A hook call is a deploy of the app, a deploy of a preview for another branch, or the end of
+ * a preview when its branch was deleted. Previews only exist for apps that turned them on.
+ */
+async function handleHook(app: AppRow, payload: HookPayload, reply: FastifyReply) {
+  const deployBranch = app.deploy_branch ?? 'main';
+  const isPreviewBranch = app.previews_enabled === 1 && payload.branch !== undefined && payload.branch !== deployBranch;
+
+  if (payload.event === 'branch-deleted') {
+    if (!payload.branch) throw badRequest('"branch" is required with "event": "branch-deleted".');
+    const removed = await removePreview(app.id, payload.branch);
+    return { removedPreview: removed };
+  }
+
+  if (isPreviewBranch) {
+    if (!payload.image) throw badRequest('"image" is required to deploy a preview.');
+    const preview = findOrCreatePreview(app, payload.branch!, payload.image);
+    const deployment = enqueueDeploy(preview.id, {
+      trigger: 'webhook',
+      image: payload.image,
+      commitSha: payload.commitSha,
+      commitMessage: payload.commitMessage,
+      branch: payload.branch,
+    });
+    reply.code(202);
+    return { deploymentId: deployment.id, status: deployment.status, image: deployment.image, preview: { id: preview.id, url: appUrl(preview.slug, preview.domain) } };
+  }
+
+  const deployment = enqueueDeploy(app.id, {
+    trigger: 'webhook',
+    image: payload.image,
+    commitSha: payload.commitSha,
+    commitMessage: payload.commitMessage,
+    branch: payload.branch,
+  });
+  reply.code(202);
+  return { deploymentId: deployment.id, status: deployment.status, image: deployment.image };
+}
 
 export function globalHookEnabled(): boolean {
   return getSetting(GLOBAL_HOOK) !== null;
@@ -73,10 +127,8 @@ export async function hookRoutes(app: FastifyInstance): Promise<void> {
     if (!row) throw notFound('App');
     verifySignature(req, decrypt(row.hook_secret_enc));
 
-    const { image, commitSha } = parseDeploy(req.body);
-    const deployment = enqueueDeploy(row.id, { trigger: 'webhook', image, commitSha });
-    reply.code(202);
-    return { deploymentId: deployment.id, status: deployment.status, image: deployment.image };
+    const payload = parseDeploy(req.body);
+    return handleHook(row, payload, reply);
   });
 
   /**
@@ -89,10 +141,12 @@ export async function hookRoutes(app: FastifyInstance): Promise<void> {
     if (!secret) throw new HttpError(404, 'The global deploy hook is not enabled on this server.');
     verifySignature(req, decrypt(secret));
 
-    const { image, commitSha } = parseDeploy(req.body);
+    const payload = parseDeploy(req.body);
+    const { image } = payload;
     if (!image) throw badRequest('"image" is required so Dockyard knows which app to deploy.');
     const repository = imageRepository(image);
-    const rows = (db.prepare('SELECT * FROM apps').all() as AppRow[]).filter(
+    // Previews share their parent's image repository; the hook always addresses the parent.
+    const rows = (db.prepare('SELECT * FROM apps WHERE preview_of IS NULL').all() as AppRow[]).filter(
       (row) => imageRepository(getServiceImage(row.compose, row.primary_service) ?? '') === repository,
     );
     if (!rows.length) throw new HttpError(404, `No app on this server uses the image ${repository}. Create the app first.`);
@@ -100,9 +154,7 @@ export async function hookRoutes(app: FastifyInstance): Promise<void> {
       throw new HttpError(409, `${rows.length} apps use the image ${repository}. Use each app's own deploy hook instead.`);
     }
 
-    const deployment = enqueueDeploy(rows[0].id, { trigger: 'webhook', image, commitSha });
-    reply.code(202);
-    return { deploymentId: deployment.id, status: deployment.status, image: deployment.image };
+    return handleHook(rows[0], payload, reply);
   });
 
   app.get('/api/global-hook', async () => {

@@ -17,7 +17,7 @@ const COOKIE = 'dy_session';
 const PUBLIC_API = [/^\/api\/health$/, /^\/api\/auth\/(login|status|setup)$/, /^\/api\/hooks(\/|$)/];
 // API tokens can do everything except manage tokens, the password, the server-wide hook secret,
 // registry credentials, the GitHub token or public access, so a leaked one can't mint more access.
-const SESSION_ONLY = /^\/api\/(tokens|global-hook|registries|cloudflare|onboarding|github|auth\/password)(\/|$)/;
+const SESSION_ONLY = /^\/api\/(tokens|global-hook|registries|cloudflare|onboarding|github|update|auth\/password)(\/|$)/;
 const BEARER = /^Bearer (dyt_[a-f0-9]{64})$/;
 
 const attempts = new Map<string, { count: number; resetAt: number }>();

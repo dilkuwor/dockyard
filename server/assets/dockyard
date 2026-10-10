@@ -12,12 +12,15 @@ Usage: dockyard <command>
 Run inside the app's git repository (it must have a GitHub remote named origin).
 
   deploy [--name NAME] [--port PORT] [--address NAME] [--domain DOMAIN] [--branch BRANCH]
-         [--no-push] [--no-wait] [--reset-secret]
+         [--previews | --no-previews] [--no-push] [--no-wait] [--reset-secret]
       Registers the app on Dockyard if it is new (needs --port), adds
       .github/workflows/dockyard.yml, pushes, and waits until the app is live.
       Safe to run again: later runs update and redeploy the same app.
       --domain picks which of the server's public domains the app lives under
       (see `dockyard guide`); without it, the server's default domain is used.
+      --previews turns on preview deployments: every other branch pushed to GitHub
+      gets its own address, <address>-<branch>.<domain>, removed when the branch is
+      deleted. The workflow is rewritten to build on every branch.
       The workflow signs its call with the repository secret DOCKYARD_HOOK_SECRET.
       When the server has a GitHub token (dashboard's GitHub & Deploy Hooks page), it adds
       that secret to the repository itself if it is missing; --reset-secret makes it
@@ -129,11 +132,34 @@ name: Deploy to Dockyard
 
 on:
   push:
-    branches: [__BRANCH__]
+    branches: __BRANCHES__
+  delete:
   workflow_dispatch:
 
 jobs:
+  # A deleted branch tells Dockyard to remove that branch's preview deployment.
+  cleanup:
+    if: github.event_name == 'delete' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tell Dockyard the branch is gone
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          HOOK_URL: __HOOK_URL__
+          HOOK_SECRET: ${{ secrets.DOCKYARD_HOOK_SECRET }}
+          BRANCH: ${{ github.event.ref }}
+        run: |
+          BODY=$(jq -nc --arg image "${IMAGE,,}" --arg branch "$BRANCH" '{image: $image, branch: $branch, event: "branch-deleted"}')
+          TS=$(date +%s)
+          SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$HOOK_SECRET" -hex | sed 's/^.* //')
+          curl -fsS -X POST "$HOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Dockyard-Timestamp: $TS" \
+            -H "X-Dockyard-Signature: sha256=$SIG" \
+            -d "$BODY"
+
   deploy:
+    if: github.event_name != 'delete'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -149,17 +175,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Image names on ghcr.io must be lowercase.
+      # Image names on ghcr.io must be lowercase. Only the deploy branch moves the "latest" tag.
       - id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: |
+          NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
+          TAGS="$NAME:$GITHUB_SHA"
+          [ "$GITHUB_REF_NAME" = "__BRANCH__" ] && TAGS="$TAGS,$NAME:latest"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
 
       - id: build
         uses: docker/build-push-action@v6
         with:
           push: true
-          tags: |
-            ${{ steps.image.outputs.name }}:latest
-            ${{ steps.image.outputs.name }}:${{ github.sha }}
+          tags: ${{ steps.image.outputs.tags }}
 
       - name: Tell Dockyard to deploy
         env:
@@ -167,9 +196,11 @@ jobs:
           HOOK_URL: __HOOK_URL__
           HOOK_SECRET: ${{ secrets.DOCKYARD_HOOK_SECRET }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
         run: |
-          BODY=$(jq -nc --arg image "$IMAGE" --arg digest "$DIGEST" --arg commit "$GITHUB_SHA" \
-            '{image: $image, digest: $digest, commit: $commit}')
+          BODY=$(jq -nc --arg image "$IMAGE" --arg digest "$DIGEST" --arg commit "$GITHUB_SHA" --arg message "$MESSAGE" --arg branch "$BRANCH" \
+            '{image: $image, digest: $digest, commit: $commit, message: $message, branch: $branch}')
           TS=$(date +%s)
           SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$HOOK_SECRET" -hex | sed 's/^.* //')
           curl -fsS -X POST "$HOOK_URL" \
@@ -227,7 +258,7 @@ wait_for_deploy() {
 }
 
 cmd_deploy() {
-  local name="" port="" address="" domain="" branch="" push=1 wait=1 reset_secret=false
+  local name="" port="" address="" domain="" branch="" push=1 wait=1 reset_secret=false previews=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --name) name=${2-}; shift 2 ;;
@@ -238,6 +269,8 @@ cmd_deploy() {
       --no-push) push=0; shift ;;
       --no-wait) wait=0; shift ;;
       --reset-secret) reset_secret=true; shift ;;
+      --previews) previews=true; shift ;;
+      --no-previews) previews=false; shift ;;
       *) die "unknown option for deploy: $1" ;;
     esac
   done
@@ -245,7 +278,7 @@ cmd_deploy() {
 
   require_config
 
-  local root image app hook file previous sha patch created meta hook_url repo stored
+  local root image app hook file previous sha patch created meta hook_url repo stored previews_on
   root=$(repo_root) || exit 1
   image=$(repo_image) || exit 1
   [ -f "$root/Dockerfile" ] || die "no Dockerfile at the repository root. Dockyard runs images, so the app needs one."
@@ -255,19 +288,20 @@ cmd_deploy() {
   if [ -z "$app" ]; then
     [ -n "$port" ] || die "this app is not on Dockyard yet. Pass --port <the port it listens on inside the container>."
     [ -n "$name" ] || name=$(basename "$root")
-    created=$(api POST /api/apps "$(jq -nc --arg name "$name" --arg image "$image:latest" --arg slug "$address" --arg port "$port" --arg domain "$domain" \
-      '{name: $name, sourceType: "image", image: $image, port: ($port | tonumber), deploy: false} + (if $slug != "" then {slug: $slug} else {} end) + (if $domain != "" then {domain: $domain} else {} end)')") || exit 1
+    created=$(api POST /api/apps "$(jq -nc --arg name "$name" --arg image "$image:latest" --arg slug "$address" --arg port "$port" --arg domain "$domain" --arg branch "$branch" --arg previews "$previews" \
+      '{name: $name, sourceType: "image", image: $image, port: ($port | tonumber), deploy: false, deployBranch: $branch} + (if $slug != "" then {slug: $slug} else {} end) + (if $domain != "" then {domain: $domain} else {} end) + (if $previews == "true" then {previewsEnabled: true} else {} end)')") || exit 1
     app=$(printf '%s' "$created" | jq -r .id)
     echo "Registered \"$name\" on Dockyard."
   else
     echo "Found this repository's app on Dockyard."
-    if [ -n "$name$port$address$domain" ]; then
-      patch=$(jq -nc --arg name "$name" --arg slug "$address" --arg port "$port" --arg domain "$domain" \
-        '(if $name != "" then {name: $name} else {} end) + (if $slug != "" then {slug: $slug} else {} end) + (if $port != "" then {port: ($port | tonumber)} else {} end) + (if $domain != "" then {domain: $domain} else {} end)')
+    if [ -n "$name$port$address$domain$previews" ]; then
+      patch=$(jq -nc --arg name "$name" --arg slug "$address" --arg port "$port" --arg domain "$domain" --arg branch "$branch" --arg previews "$previews" \
+        '{deployBranch: $branch} + (if $name != "" then {name: $name} else {} end) + (if $slug != "" then {slug: $slug} else {} end) + (if $port != "" then {port: ($port | tonumber)} else {} end) + (if $domain != "" then {domain: $domain} else {} end) + (if $previews != "" then {previewsEnabled: ($previews == "true")} else {} end)')
       api PATCH "/api/apps/$app" "$patch" >/dev/null
       echo "Updated its settings."
     fi
   fi
+  previews_on=$(api GET "/api/apps/$app" | jq -r '.previewsEnabled // false')
 
   repo=${image#ghcr.io/}
   meta=$(api GET /api/meta) || exit 1
@@ -306,7 +340,13 @@ cmd_deploy() {
 
   file=.github/workflows/dockyard.yml
   mkdir -p "$root/.github/workflows"
-  workflow | sed -e "s|__BRANCH__|$branch|" -e "s|__HOOK_URL__|$hook_url|" > "$root/$file"
+  if [ "$previews_on" = true ]; then
+    workflow_branches="['**']"
+    echo "Preview deployments are on: other branches get their own address and are removed when deleted."
+  else
+    workflow_branches="[$branch]"
+  fi
+  workflow | sed -e "s|__BRANCH__|$branch|" -e "s|__BRANCHES__|$workflow_branches|" -e "s|__HOOK_URL__|$hook_url|" > "$root/$file"
   git -C "$root" add "$file"
   if ! git -C "$root" diff --cached --quiet -- "$file"; then
     git -C "$root" commit -q -m "Add Dockyard deploy workflow" -- "$file"

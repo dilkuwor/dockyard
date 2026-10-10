@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router'
 import { api, type AppDetail } from '../../api'
 import { useResource } from '../../lib'
 import { Button, Card, ErrorNote, Field, Section, Select, TextArea, TextInput } from '../../components/ui'
+import Addons from '../../components/Addons'
+import Hostnames from '../../components/Hostnames'
 
 export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: () => void }) {
   const navigate = useNavigate()
   const [name, setName] = useState(app.name)
   const [slug, setSlug] = useState(app.slug)
   const [domain, setDomain] = useState(app.domain ?? '')
+  const [deployBranch, setDeployBranch] = useState(app.deployBranch ?? '')
+  const [previewsEnabled, setPreviewsEnabled] = useState(app.previewsEnabled)
   const { data: meta } = useResource(api.meta, [])
   const domains = meta?.domains ?? []
   const [port, setPort] = useState(String(app.port))
@@ -27,7 +31,7 @@ export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: ()
     setError(null)
     setSaved('')
     try {
-      await api.updateApp(app.id, { name, slug, domain, port: Number(port), primaryService, compose })
+      await api.updateApp(app.id, { name, slug, domain, port: Number(port), primaryService, compose, deployBranch, previewsEnabled })
       if (deploy) {
         await api.deploy(app.id)
         navigate(`/apps/${app.id}/deployments`)
@@ -90,6 +94,40 @@ export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: ()
           {saved && <span role="status" className="ml-1 font-medium text-starboard">{saved}</span>}
         </div>
       </Card>
+
+      {!app.previewOf && (
+        <Section title="Preview deployments">
+          <Card className="space-y-4 p-5">
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={previewsEnabled} onChange={(e) => setPreviewsEnabled(e.target.checked)} className="mt-0.5 size-4 accent-ink" />
+              <span>
+                Give every other branch its own address
+                <span className="block text-xs text-ink-soft">
+                  A push to any branch except the deploy branch creates <span className="font-mono">{app.slug}-&lt;branch&gt;</span> with this
+                  app's compose file and variables, and deleting the branch removes it. After saving, run{' '}
+                  <span className="font-mono">dockyard deploy</span> once so the GitHub workflow builds every branch.
+                </span>
+              </span>
+            </label>
+            <Field label="Deploy branch" hint="Pushes to this branch deploy the app itself. Leave blank for main.">
+              <TextInput value={deployBranch} onChange={(e) => setDeployBranch(e.target.value)} placeholder="main" className="max-w-xs font-mono text-[13px]" />
+            </Field>
+            <p className="text-xs text-ink-soft">Saved with the settings above.</p>
+          </Card>
+        </Section>
+      )}
+
+      <Section title="Add-ons">
+        <Card className="p-5">
+          <Addons app={app} onChange={onSaved} />
+        </Card>
+      </Section>
+
+      <Section title="Custom hostnames">
+        <Card className="p-5">
+          <Hostnames app={app} onChange={onSaved} />
+        </Card>
+      </Section>
 
       <Section title="Delete app">
         <div className="rounded-lg border border-port/30 bg-panel p-5">

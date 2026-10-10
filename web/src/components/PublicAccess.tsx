@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { api, type PublicAccessStatus, type SetupResult, type SetupStep } from '../api'
-import { cx, useResource } from '../lib'
+import { cx, timeAgo, useResource } from '../lib'
 import { Button, ErrorNote, Field, Select, TextInput } from './ui'
 import Domains from './Domains'
 
@@ -297,7 +297,11 @@ export default function PublicAccess() {
           </p>
           <p className="mt-1 text-xs text-ink-soft">
             {status.enabled
-              ? `Connector ${status.connector === 'running' ? 'running' : 'not running'} · ${status.mode === 'automatic' ? 'set up by Dockyard' : 'using your own tunnel'}${status.hasApiToken ? ' · API token saved' : ''} · local address still works: ${status.localDashboardUrl}`
+              ? `Connector ${status.connector === 'running' ? 'running' : 'not running'} · ${status.mode === 'automatic' ? 'set up by Dockyard' : 'using your own tunnel'}${status.hasApiToken ? ' · API token saved' : ''}${
+                  status.watchdog.lastCheck
+                    ? ` · public check ${status.watchdog.publicOk ? 'passed' : 'failed'} ${timeAgo(status.watchdog.lastCheck)}`
+                    : ''
+                }${status.watchdog.restarts.length ? ` · connector restarted ${timeAgo(status.watchdog.restarts[status.watchdog.restarts.length - 1].at)}` : ''} · local address still works: ${status.localDashboardUrl}`
               : status.configured
                 ? `Settings for ${status.domain} are saved, so you can switch it back on without Cloudflare.`
                 : 'Connect a Cloudflare domain to give every app a public HTTPS address. GitHub deploy hooks also need this.'}

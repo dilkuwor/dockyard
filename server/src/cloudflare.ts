@@ -1,6 +1,6 @@
 import { config } from './config.js';
 import { randomId, sha256Hex } from './crypto.js';
-import { connectorId, connectorState, startConnector, stopConnector, waitForConnector } from './docker.js';
+import { connectorId, connectorState, connectorUpToDate, startConnector, stopConnector, waitForConnector } from './docker.js';
 import { badRequest } from './errors.js';
 import { completeOnboarding, configuredDomains, publicAccess, savePublicAccess, type PublicAccess } from './site.js';
 
@@ -62,7 +62,8 @@ export async function ensureConnector(): Promise<void> {
     if (state.status !== 'missing') await stopConnector();
     return;
   }
-  if (state.status === 'running' && state.tokenId === tokenId(access.tunnelToken)) return;
+  // Recreated when the token changed, or when it still runs the old QUIC default.
+  if (await connectorUpToDate(tokenId(access.tunnelToken))) return;
   const error = await startConnector(access.tunnelToken, tokenId(access.tunnelToken));
   if (error) throw new Error(`Could not start the Cloudflare connector: ${error}`);
 }
@@ -99,8 +100,7 @@ async function publiclyReachable(domain: string): Promise<boolean> {
 async function activate(access: PublicAccess, steps: Step[]): Promise<boolean> {
   // Leave a connector that already uses this token alone: restarting it would drop live traffic,
   // including the request that asked for this when it came in through the public address.
-  const state = await connectorState();
-  const alreadyRunning = state.status === 'running' && state.tokenId === tokenId(access.tunnelToken);
+  const alreadyRunning = await connectorUpToDate(tokenId(access.tunnelToken));
   const startError = alreadyRunning ? null : await startConnector(access.tunnelToken, tokenId(access.tunnelToken));
   const connectError = startError ?? (await waitForConnector());
   if (connectError) {
@@ -568,4 +568,112 @@ export function setDefaultDomain(domain: string): void {
   if (!access) throw badRequest('Public access has not been set up.');
   if (!configuredDomains().includes(domain)) throw badRequest('That domain is not configured.');
   savePublicAccess({ ...access, defaultDomain: domain === access.domain ? undefined : domain, updatedAt: Date.now() });
+}
+
+/** The zone a hostname belongs to, found by trying ever shorter suffixes with the token's zone list. */
+async function zoneFor(apiToken: string, hostname: string): Promise<{ id: string; name: string; account: { id: string } } | null> {
+  const parts = hostname.split('.');
+  for (let i = 0; i < parts.length - 1; i++) {
+    const candidate = parts.slice(i).join('.');
+    const zones = await cf<{ id: string; name: string; account: { id: string } }[]>(apiToken, 'GET', `/zones?name=${encodeURIComponent(candidate)}&status=active`);
+    if (zones[0]) return zones[0];
+  }
+  return null;
+}
+
+/** Adds or removes the tunnel route for one exact hostname. */
+async function setHostRoute(apiToken: string, account: string, tunnelId: string, hostname: string, present: boolean): Promise<void> {
+  const path = ingressPath(account, tunnelId);
+  const current = await cf<{ config?: { ingress?: Ingress[] } | null }>(apiToken, 'GET', path).catch(() => null);
+  const others = (current?.config?.ingress ?? []).filter((rule) => rule.hostname && rule.hostname !== hostname);
+  const ours = present ? [{ hostname, service: 'http://traefik:80', originRequest: {} }] : [];
+  // Exact hostnames go before wildcards so they win, which is also how Cloudflare evaluates them.
+  await cf(apiToken, 'PUT', path, { config: { ...(current?.config ?? {}), ingress: [...ours, ...others, { service: 'http_status:404' }] } });
+}
+
+/**
+ * Points a custom hostname at this install's tunnel: a tunnel route plus a proxied CNAME in its zone.
+ * Cloudflare flattens CNAMEs at the apex, so example.com itself works too.
+ */
+export async function attachHostname(hostname: string): Promise<SetupResult & { zoneId: string | null }> {
+  const access = publicAccess();
+  const steps: Step[] = [];
+  if (!access) return { ok: false, zoneId: null, steps: [{ name: 'Cloudflare', status: 'failed', detail: 'Public access is not set up.' }] };
+  if (access.mode !== 'automatic' || !access.apiToken || !access.accountId || !access.tunnelId) {
+    steps.push({
+      name: 'Cloudflare',
+      status: 'warning',
+      detail: `Dockyard has no saved API token for this. In Cloudflare, add a published application route for ${hostname} → HTTP → traefik:80 to your tunnel, and a proxied CNAME record for ${hostname} pointing at the tunnel.`,
+    });
+    return { ok: true, zoneId: null, steps };
+  }
+  const token = access.apiToken;
+
+  let zone: Awaited<ReturnType<typeof zoneFor>>;
+  try {
+    zone = await zoneFor(token, hostname);
+  } catch (err) {
+    return { ok: false, zoneId: null, steps: [{ name: 'Find the zone', status: 'failed', detail: (err as Error).message }] };
+  }
+  if (!zone) {
+    return { ok: false, zoneId: null, steps: [{ name: 'Find the zone', status: 'failed', detail: `No Cloudflare zone of yours contains ${hostname}. Add its domain to Cloudflare first.` }] };
+  }
+  if (zone.account.id !== access.accountId) {
+    return { ok: false, zoneId: null, steps: [{ name: 'Find the zone', status: 'failed', detail: `${zone.name} is in a different Cloudflare account than this Dockyard's tunnel.` }] };
+  }
+  steps.push({ name: 'Find the zone', status: 'ok', detail: zone.name });
+
+  try {
+    await setHostRoute(token, access.accountId, access.tunnelId, hostname, true);
+    steps.push({ name: 'Route the hostname to Dockyard', status: 'ok', detail: `${hostname} goes to Dockyard's proxy through the tunnel.` });
+  } catch (err) {
+    return { ok: false, zoneId: zone.id, steps: [...steps, { name: 'Route the hostname to Dockyard', status: 'failed', detail: (err as Error).message }] };
+  }
+
+  try {
+    const target = `${access.tunnelId}.cfargotunnel.com`;
+    const records = await cf<DnsRecord[]>(token, 'GET', `/zones/${zone.id}/dns_records?name=${encodeURIComponent(hostname)}`);
+    const ours = records.find((r) => r.type === 'CNAME' && r.content === target);
+    const others = records.filter((r) => !(r.type === 'CNAME' && r.content === target));
+    if (others.length) {
+      const list = others.map((r) => `${r.type} to ${r.content}`).join(', ');
+      throw new Error(`${hostname} already has a DNS record pointing elsewhere (${list}). Remove it in Cloudflare, then add the hostname again.`);
+    }
+    if (!ours) {
+      await cf(token, 'POST', `/zones/${zone.id}/dns_records`, { type: 'CNAME', name: hostname, content: target, proxied: true, comment: 'Dockyard custom hostname' });
+    } else if (!ours.proxied) {
+      await cf(token, 'PATCH', `/zones/${zone.id}/dns_records/${ours.id}`, { proxied: true });
+    }
+    steps.push({ name: 'Point DNS at the tunnel', status: 'ok', detail: `${hostname} is proxied through Cloudflare to the tunnel.` });
+  } catch (err) {
+    await setHostRoute(token, access.accountId, access.tunnelId, hostname, false).catch(() => undefined);
+    return { ok: false, zoneId: zone.id, steps: [...steps, { name: 'Point DNS at the tunnel', status: 'failed', detail: (err as Error).message }] };
+  }
+  return { ok: true, zoneId: zone.id, steps };
+}
+
+/** Removes the tunnel route and the DNS record Dockyard made for a custom hostname. */
+export async function detachHostname(hostname: string, zoneId: string): Promise<SetupResult> {
+  const access = publicAccess();
+  const steps: Step[] = [];
+  if (!access?.apiToken || !access.accountId || !access.tunnelId) {
+    steps.push({ name: 'Cloudflare', status: 'warning', detail: `No saved API token: the tunnel route and DNS record for ${hostname} stay in Cloudflare.` });
+    return { ok: true, steps };
+  }
+  try {
+    await setHostRoute(access.apiToken, access.accountId, access.tunnelId, hostname, false);
+    steps.push({ name: 'Remove the tunnel route', status: 'ok', detail: `${hostname} no longer routes through the tunnel.` });
+  } catch (err) {
+    steps.push({ name: 'Remove the tunnel route', status: 'warning', detail: `Left in place: ${(err as Error).message}` });
+  }
+  try {
+    const target = `${access.tunnelId}.cfargotunnel.com`;
+    const records = await cf<DnsRecord[]>(access.apiToken, 'GET', `/zones/${zoneId}/dns_records?name=${encodeURIComponent(hostname)}`);
+    const ours = records.find((r) => r.type === 'CNAME' && r.content === target);
+    if (ours) await cf(access.apiToken, 'DELETE', `/zones/${zoneId}/dns_records/${ours.id}`);
+    steps.push({ name: 'Remove the DNS record', status: 'ok', detail: ours ? `Deleted the ${hostname} record.` : 'There was no record of ours to delete.' });
+  } catch (err) {
+    steps.push({ name: 'Remove the DNS record', status: 'warning', detail: `Left in place: ${(err as Error).message}` });
+  }
+  return { ok: true, steps };
 }

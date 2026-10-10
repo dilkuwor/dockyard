@@ -23,6 +23,13 @@ GitHub Actions ── build & push ──▶ ghcr.io / Docker Hub
   for you from the dashboard. No router ports are opened.
 - Deploys on every push through a signed hook, pinned to the exact image digest.
 - One-click rollback, encrypted environment variables, live logs, CPU and memory.
+- Deploy notes: commit message, branch and image digest per deployment, and what
+  changed in the compose file and variables since the one before.
+- Custom hostnames (`www.example.com`, apex domains) on top of each app's address.
+- Preview deployments: every branch gets its own address, removed with the branch.
+- Managed add-ons: PostgreSQL, Redis or MinIO next to the app, with the connection
+  details in its environment.
+- Updates itself from GitHub from the Settings page.
 - Pulls private images from Docker Hub, ghcr.io or any other registry.
 - Access tokens and a `dockyard` command, so scripts and AI agents can deploy.
 - Cleans up old images, and only the ones it pulled itself.
@@ -108,6 +115,10 @@ Good to know:
 - **Turning it off** stops the connector and switches addresses back to local ones.
   The settings are kept, so it can be switched back on without Cloudflare. The
   tunnel and DNS record stay in your Cloudflare account.
+- **The connector is watched.** It runs over HTTP/2, which needs none of the UDP
+  buffer tuning QUIC wants from the host, and every minute Dockyard checks the
+  public address against a local check through Traefik. If only the public path
+  fails twice in a row, the connector is restarted, at most every ten minutes.
 - **One tunnel per Dockyard.** If two installs share a tunnel, Cloudflare sends
   some of each domain's requests to the wrong machine, which shows up as random
   502s. Setup therefore refuses to join a tunnel that another machine is connected
@@ -196,6 +207,42 @@ there are three ways for it to get there:
   secret to the repository yourself.
 - Without that token and with the global deploy hook off, the command stores each
   app's own secret for you, which needs the GitHub CLI (`gh auth login`).
+
+### Custom hostnames
+
+On an app's **Settings** tab, under **Custom hostnames**, add `www.example.com` or
+`example.com`. The domain must be a zone in the same Cloudflare account as the
+tunnel: Dockyard adds a tunnel route and a proxied DNS record with the API token
+saved at setup, and Traefik starts routing the name at once through a file
+provider, so nothing is redeployed. A name that the wildcard of a configured
+domain already covers needs no Cloudflare change at all. The app's own address
+keeps working.
+
+### Preview deployments
+
+Turn them on under **Preview deployments** on the app's Settings tab (or
+`dockyard deploy --previews`) and run `dockyard deploy` once so the workflow
+builds every branch. A push to any branch other than the deploy branch then
+creates `<address>-<branch>.<domain>` with the app's compose file, port and
+variables, and deleting the branch on GitHub removes it, volumes included. Only
+the deploy branch moves the image's `latest` tag.
+
+### Add-ons
+
+**Add-ons** on the Settings tab puts PostgreSQL 16, Redis 7 or MinIO into the app's
+compose file as another service with a named volume, and the connection details
+into its environment (`DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT` and friends).
+Deploy to start it. Removing an add-on takes the service and variables out again
+and keeps the Docker volume.
+
+### Updating Dockyard
+
+**Settings → Software update** shows the commit the running image was built from
+and what is newer on the repository's branch, and updates in place: a helper
+container pulls the checkout forward and rebuilds only the `dockyard` service, so
+apps keep running and the dashboard is away for about a minute. This needs the
+checkout mounted at `/src`, which `docker-compose.yml` now does; after pulling a
+version that adds it, run `docker compose up -d --build` by hand once.
 
 ### Private images
 

@@ -11,6 +11,7 @@ import { HttpError } from './errors.js';
 import { trackDeployedImages } from './images.js';
 import { loginRegistries } from './registries.js';
 import { initPassword } from './password.js';
+import { startWatchdog } from './watchdog.js';
 import { authRoutes, requireAuth } from './routes/auth.js';
 import { appRoutes } from './routes/apps.js';
 import { hookRoutes } from './routes/hooks.js';
@@ -18,6 +19,9 @@ import { imageRoutes } from './routes/images.js';
 import { tokenRoutes } from './routes/tokens.js';
 import { agentRoutes } from './routes/agent.js';
 import { githubRoutes } from './routes/github.js';
+import { extrasRoutes } from './routes/extras.js';
+import { updateRoutes } from './routes/update.js';
+import { syncHostnameRoutes } from './hostnames.js';
 import { registryRoutes } from './routes/registries.js';
 import { cloudflareRoutes } from './routes/cloudflare.js';
 
@@ -68,6 +72,8 @@ await server.register(agentRoutes);
 await server.register(registryRoutes);
 await server.register(cloudflareRoutes);
 await server.register(githubRoutes);
+await server.register(extrasRoutes);
+await server.register(updateRoutes);
 server.get('/api/health', async () => ({ ok: true }));
 
 const indexHtml = path.join(config.publicDir, 'index.html');
@@ -82,6 +88,7 @@ server.setNotFoundHandler((req, reply) => {
 });
 
 recoverInterruptedDeployments();
+syncHostnameRoutes();
 await initPassword();
 importLegacySettings(db.prepare('SELECT 1 FROM apps LIMIT 1').get() !== undefined);
 
@@ -90,6 +97,7 @@ if (await dockerAvailable()) {
   await loginRegistries().catch((err) => server.log.warn(err.message));
   await ensureConnector().catch((err) => server.log.warn(err.message));
   void trackDeployedImages().catch((err) => server.log.warn(err.message));
+  startWatchdog((msg) => server.log.warn(msg));
 } else {
   server.log.warn('Docker is not reachable. Mount /var/run/docker.sock to manage apps.');
 }

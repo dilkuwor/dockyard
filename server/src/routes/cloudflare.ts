@@ -14,6 +14,7 @@ import {
   setupManual,
 } from '../cloudflare.js';
 import { db } from '../db.js';
+import { watchdogStatus } from '../watchdog.js';
 import { config } from '../config.js';
 import { connectorState } from '../docker.js';
 import { appUrl, completeOnboarding, configuredDomains, dashboardUrl, defaultDomain, onboardingPending, publicAccess } from '../site.js';
@@ -37,6 +38,7 @@ async function status() {
     mode: access?.mode ?? null,
     domain: access?.domain ?? null,
     connector: (await connectorState()).status,
+    watchdog: watchdogStatus(),
     // Whether the Cloudflare API token from setup is saved, so domain changes need no pasting.
     hasApiToken: Boolean(access?.apiToken),
     domains: configuredDomains().map((domain) => ({

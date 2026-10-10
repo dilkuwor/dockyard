@@ -75,6 +75,9 @@ The `dockyard` command below sets all of this up in one step.
    - `--domain` is optional: which of the server's public domains the app lives under.
      `GET /api/meta` lists them in `domains` and the one used without the flag in
      `defaultDomain`. Only pass it when the user asks for a specific domain.
+   - `--previews` turns on preview deployments: every other branch gets its own
+     address `<address>-<branch>.<domain>`, removed when the branch is deleted. The
+     workflow is written to build every branch. Only use it when the user asks.
    - The command registers the app, commits `.github/workflows/dockyard.yml`, pushes
      the current branch, and waits until the app is live. It prints the address when done.
      When Dockyard has a GitHub token, or the global hook is off, it also stores the
@@ -141,6 +144,10 @@ Every request needs `Authorization: Bearer $DOCKYARD_TOKEN`. Bodies and response
 | `POST /api/deployments/:id/rollback` | Roll back to that deployment |
 | `GET` / `PUT /api/apps/:id/env` | Read or replace variables: `{vars: [{key, value}]}` |
 | `GET /api/apps/:id/hook` | The deploy hook URL and signing secret |
+| `GET /api/deployments/:id/diff` | What changed since the previous deployment: image, compose file, variable names |
+| `GET /api/apps/:id/previews` | Preview apps created from this app's branches |
+| `GET` / `POST /api/apps/:id/addons` | Managed add-ons: `{type: "postgres" \| "redis" \| "minio"}` adds the service and its variables; `DELETE /api/apps/:id/addons/:type` removes them. Deploy afterwards |
+| `GET` / `POST /api/apps/:id/hostnames` | Custom hostnames: `{hostname: "www.example.com"}` routes it to the app (Cloudflare changes included); `DELETE /api/apps/:id/hostnames/:hostname` removes it. Takes effect without a deploy |
 | `POST /api/apps/:id/github-secrets` | `{repo: "owner/name", reset?: boolean}`: store the hook secret in that GitHub repository with Dockyard's token. Answers `{configured: false}` without a token; otherwise `{secrets: {NAME: "added" \| "present" \| "updated"}}`. The repository must be the one the app's ghcr.io image is built from |
 | `GET /api/apps/:id/logs?tail=200` | Recent container logs (plain text) |
 | `POST /api/apps/:id/actions/{start,stop,restart}` | Control the containers |
@@ -148,7 +155,10 @@ Every request needs `Authorization: Bearer $DOCKYARD_TOKEN`. Bodies and response
 The deploy hook is `POST /api/hooks/:id` (signed with that app's secret) or, when the
 global hook is on, `POST /api/hooks` (signed with the global secret; the app is the one
 whose image comes from the same repository as `image`). Both take the body
-`{"image": "...", "digest": "sha256:...", "commit": "..."}` and headers
+`{"image": "...", "digest": "sha256:...", "commit": "...", "message": "...", "branch": "..."}`
+(`message` and `branch` are optional notes; with previews on, a `branch` other than the
+deploy branch deploys that branch's preview, and `{"event": "branch-deleted", "branch": "..."}`
+removes it) and headers
 `X-Dockyard-Timestamp: <unix seconds>` and
 `X-Dockyard-Signature: sha256=<hex HMAC-SHA256(secret, "<timestamp>.<body>")>`.
 They need no token; the signature authenticates them.

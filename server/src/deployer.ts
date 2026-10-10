@@ -19,6 +19,8 @@ export interface DeployRequest {
   trigger: DeploymentRow['trigger'];
   image?: string;
   commitSha?: string;
+  commitMessage?: string;
+  branch?: string;
   rollbackOf?: string;
 }
 
@@ -56,13 +58,17 @@ export function enqueueDeploy(appId: string, req: DeployRequest): DeploymentRow 
     commit_sha: req.commitSha ?? null,
     compose: composeText,
     rollback_of: req.rollbackOf ?? null,
+    commit_message: req.commitMessage ?? null,
+    branch: req.branch ?? null,
+    // The environment as deployed, so two deployments can be compared later.
+    env_enc: app.env_enc,
     log: '',
     created_at: Date.now(),
     finished_at: null,
   };
   db.prepare(
-    `INSERT INTO deployments (id, app_id, status, trigger, image, commit_sha, compose, rollback_of, log, created_at)
-     VALUES (@id, @app_id, @status, @trigger, @image, @commit_sha, @compose, @rollback_of, @log, @created_at)`,
+    `INSERT INTO deployments (id, app_id, status, trigger, image, commit_sha, compose, rollback_of, commit_message, branch, env_enc, log, created_at)
+     VALUES (@id, @app_id, @status, @trigger, @image, @commit_sha, @compose, @rollback_of, @commit_message, @branch, @env_enc, @log, @created_at)`,
   ).run(deployment);
 
   const previous = queues.get(appId) ?? Promise.resolve();

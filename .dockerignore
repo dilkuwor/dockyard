@@ -1,5 +1,10 @@
-.git
+.git/**
+!.git/HEAD
+!.git/refs/**
+!.git/packed-refs
 .env
 .data
 **/node_modules
 **/dist
+DESIGN
+docs

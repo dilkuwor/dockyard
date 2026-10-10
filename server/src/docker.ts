@@ -206,12 +206,26 @@ export async function registryLogout(registry: string): Promise<void> {
 const CONNECTOR = 'dockyard-cloudflared';
 const lastLine = (text: string) => text.split('\n').map((line) => line.trim()).filter(Boolean).pop() ?? 'Docker did not say why.';
 
-/** The label lets Dockyard tell whether the running connector already uses the current token. */
-export async function connectorState(): Promise<{ status: 'running' | 'stopped' | 'missing'; tokenId: string }> {
-  const res = await run(['inspect', '--format', '{{.State.Running}} {{index .Config.Labels "dockyard.token"}}', CONNECTOR]);
-  if (res.code !== 0) return { status: 'missing', tokenId: '' };
-  const [running, tokenId = ''] = res.stdout.trim().split(' ');
-  return { status: running === 'true' ? 'running' : 'stopped', tokenId };
+/** What the connector should be started with. HTTP/2 avoids QUIC's UDP buffer needs, which containers cannot meet. */
+export const CONNECTOR_PROTOCOL = 'http2';
+
+/** The labels let Dockyard tell whether the running connector already uses the current token and protocol. */
+export async function connectorState(): Promise<{ status: 'running' | 'stopped' | 'missing'; tokenId: string; protocol: string }> {
+  const res = await run([
+    'inspect',
+    '--format',
+    '{{.State.Running}} {{index .Config.Labels "dockyard.token"}} {{index .Config.Labels "dockyard.protocol"}}',
+    CONNECTOR,
+  ]);
+  if (res.code !== 0) return { status: 'missing', tokenId: '', protocol: '' };
+  const [running, tokenId = '', protocol = ''] = res.stdout.trim().split(' ');
+  return { status: running === 'true' ? 'running' : 'stopped', tokenId, protocol };
+}
+
+/** True when the running connector matches the current token and protocol, so it can be left alone. */
+export async function connectorUpToDate(tokenId: string): Promise<boolean> {
+  const state = await connectorState();
+  return state.status === 'running' && state.tokenId === tokenId && state.protocol === CONNECTOR_PROTOCOL;
 }
 
 /**
@@ -223,8 +237,9 @@ export async function startConnector(token: string, tokenId: string): Promise<st
   const res = await run(
     [
       'run', '-d', '--name', CONNECTOR, '--restart', 'unless-stopped', '--network', config.edgeNetwork,
-      '--label', 'dockyard.role=connector', '--label', `dockyard.token=${tokenId}`, '-e', 'TUNNEL_TOKEN',
-      'cloudflare/cloudflared:latest', 'tunnel', '--no-autoupdate', 'run',
+      '--label', 'dockyard.role=connector', '--label', `dockyard.token=${tokenId}`, '--label', `dockyard.protocol=${CONNECTOR_PROTOCOL}`,
+      '-e', 'TUNNEL_TOKEN',
+      'cloudflare/cloudflared:latest', 'tunnel', '--no-autoupdate', '--protocol', CONNECTOR_PROTOCOL, 'run',
     ],
     { env: { TUNNEL_TOKEN: token }, timeoutMs: 180_000 },
   );

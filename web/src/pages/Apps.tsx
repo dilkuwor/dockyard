@@ -268,8 +268,13 @@ export default function AppsPage() {
                           <div className="flex items-center gap-3">
                             <AppAvatar id={app.id} name={app.name} />
                             <div className="min-w-0">
-                              <Link to={`/apps/${app.id}`} className="block truncate font-semibold text-ink transition-colors hover:text-accent">
-                                {app.name}
+                              <Link to={`/apps/${app.id}`} className="flex items-center gap-2 truncate font-semibold text-ink transition-colors hover:text-accent">
+                                <span className="truncate">{app.name}</span>
+                                {app.previewOf && (
+                                  <span className="shrink-0 rounded-full bg-accent/12 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-accent uppercase" title={`Preview of branch ${app.branch}`}>
+                                    Preview
+                                  </span>
+                                )}
                               </Link>
                               <a
                                 href={app.url}

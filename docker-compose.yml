@@ -13,8 +13,13 @@ services:
       - --providers.docker.network=dockyard_edge
       - --entrypoints.web.address=:80
       - --entrypoints.web.forwardedheaders.insecure=true
+      # Custom hostnames: Dockyard writes one router file per app here.
+      - --providers.file.directory=/dynamic
+      - --providers.file.watch=true
       - --accesslog=true
       - --log.level=INFO
+    volumes:
+      - dockyard-dynamic:/dynamic:ro
     ports:
       # Local addresses: http://dockyard.localhost:8080 and http://<app>.localhost:8080.
       - "${LOCAL_BIND:-127.0.0.1}:${LOCAL_PORT:-8080}:80"
@@ -46,6 +51,9 @@ services:
       # Full Docker access is required to run deployments. Treat the dashboard password like root.
       - /var/run/docker.sock:/var/run/docker.sock
       - dockyard-data:/data
+      - dockyard-dynamic:/dynamic
+      # The checkout itself, so the dashboard can check for and apply updates of Dockyard.
+      - .:/src
     ports:
       # Direct local access to the dashboard, bypassing the proxy.
       - "127.0.0.1:3000:3000"
@@ -66,3 +74,4 @@ networks:
 
 volumes:
   dockyard-data:
+  dockyard-dynamic:

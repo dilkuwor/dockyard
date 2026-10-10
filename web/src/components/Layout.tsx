@@ -63,6 +63,8 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   const { data: apps, error: appsError } = useResource(api.listApps, [], 8000)
   const [accountOpen, setAccountOpen] = useState(false)
   const [theme, toggleTheme] = useTheme()
+  // A quiet pointer when a newer Dockyard is on GitHub; checked every half hour.
+  const { data: update } = useResource(api.updateStatus, [], 30 * 60_000)
 
   // Close mobile drawer on route changes
   const [prevPathname, setPrevPathname] = useState(pathname)
@@ -428,6 +430,14 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
             </span>
           </div>
 
+          {update && update.behind !== null && update.behind > 0 && (
+            <Link
+              to="/settings"
+              className={cx('block rounded-md px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/10', collapsed && 'md:hidden')}
+            >
+              Update available: {update.behind} new commit{update.behind === 1 ? '' : 's'}
+            </Link>
+          )}
         </div>
       </aside>
 

@@ -16,6 +16,8 @@ export const config = {
   host: process.env.HOST ?? '0.0.0.0',
   dataDir,
   appsDir: path.join(dataDir, 'apps'),
+  // Shared with Traefik's file provider: one router file per app for custom hostnames.
+  dynamicDir: process.env.DYNAMIC_DIR ?? '/dynamic',
   publicDir: process.env.PUBLIC_DIR ?? path.resolve('public'),
   assetsDir: process.env.ASSETS_DIR ?? path.resolve('assets'),
   // The dashboard is served at <dashboardSubdomain>.<domain>, on the local address and the public one.

@@ -70,11 +70,42 @@ CREATE TABLE IF NOT EXISTS images (
   id TEXT PRIMARY KEY,
   ref TEXT NOT NULL
 );
+
+-- Extra hostnames an app answers on, such as www.example.com, besides its <slug>.<domain> address.
+CREATE TABLE IF NOT EXISTS hostnames (
+  hostname TEXT PRIMARY KEY,
+  app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
+  zone_id TEXT,
+  created_at INTEGER NOT NULL
+);
+
+-- Managed add-on services (Postgres, Redis, MinIO) Dockyard put into an app's compose file.
+CREATE TABLE IF NOT EXISTS addons (
+  app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  service TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (app_id, type)
+);
 `);
 
-// Added later: the public domain an app lives under. NULL means the domain chosen at onboarding.
-const appColumns = (db.prepare('PRAGMA table_info(apps)').all() as { name: string }[]).map((c) => c.name);
-if (!appColumns.includes('domain')) db.exec('ALTER TABLE apps ADD COLUMN domain TEXT');
+/** Columns added after the first release. Each is added once; SQLite has no IF NOT EXISTS for columns. */
+function addColumn(table: string, column: string, definition: string): void {
+  const columns = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+  if (!columns.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+// The public domain an app lives under. NULL means the domain chosen at onboarding.
+addColumn('apps', 'domain', 'TEXT');
+// Preview deployments: the branch that deploys the app itself, whether other branches get previews,
+// and for a preview app, which app and branch it belongs to.
+addColumn('apps', 'deploy_branch', 'TEXT');
+addColumn('apps', 'previews_enabled', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('apps', 'preview_of', 'TEXT');
+addColumn('apps', 'branch', 'TEXT');
+// Deploy notes: what the hook told us, and the environment as it was for this deployment.
+addColumn('deployments', 'commit_message', 'TEXT');
+addColumn('deployments', 'branch', 'TEXT');
+addColumn('deployments', 'env_enc', 'TEXT');
 
 export interface AppRow {
   id: string;
@@ -88,6 +119,10 @@ export interface AppRow {
   hook_secret_enc: string;
   current_deployment_id: string | null;
   domain: string | null;
+  deploy_branch: string | null;
+  previews_enabled: number;
+  preview_of: string | null;
+  branch: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -101,6 +136,9 @@ export interface DeploymentRow {
   commit_sha: string | null;
   compose: string;
   rollback_of: string | null;
+  commit_message: string | null;
+  branch: string | null;
+  env_enc: string | null;
   log: string;
   created_at: number;
   finished_at: number | null;

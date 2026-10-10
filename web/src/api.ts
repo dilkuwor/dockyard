@@ -7,10 +7,49 @@ export interface Deployment {
   trigger: 'create' | 'manual' | 'webhook' | 'rollback'
   image: string | null
   commitSha: string | null
+  commitMessage: string | null
+  branch: string | null
   rollbackOf: string | null
   createdAt: number
   finishedAt: number | null
   log?: string
+}
+
+export interface DeploymentDiff {
+  previous: { id: string; createdAt: number; status: DeploymentStatus } | null
+  image: { before: string | null; after: string | null }
+  compose: { before: string; after: string; changed: boolean }
+  env: { added: string[]; removed: string[]; changed: string[] }
+}
+
+export type AddonType = 'postgres' | 'redis' | 'minio'
+
+export interface AddonInfo {
+  type: AddonType
+  label: string
+  service: string
+  envKeys: string[]
+  note: string
+  added: boolean
+  addedAt: number | null
+}
+
+export interface HostnameInfo {
+  hostname: string
+  cloudflare: boolean
+  createdAt: number
+}
+
+export interface UpdateStatus {
+  running: string | null
+  checkout: string | null
+  repo: { owner: string; name: string; branch: string } | null
+  latest: string | null
+  behind: number | null
+  commits: { sha: string; message: string; date: string; author: string }[]
+  checkedAt: number | null
+  blocked: string | null
+  updater: { state: 'idle' | 'running' | 'done' | 'failed'; startedAt: number | null }
 }
 
 export interface AppSummary {
@@ -19,6 +58,12 @@ export interface AppSummary {
   slug: string
   domain: string | null
   url: string
+  hostnames: string[]
+  addons: AddonType[]
+  deployBranch: string | null
+  previewsEnabled: boolean
+  previewOf: string | null
+  branch: string | null
   sourceType: 'image' | 'compose'
   primaryService: string
   port: number
@@ -96,6 +141,13 @@ export interface PublicAccessStatus {
   mode: 'automatic' | 'manual' | null
   domain: string | null
   connector: 'running' | 'stopped' | 'missing'
+  watchdog: {
+    lastCheck: number | null
+    publicOk: boolean | null
+    localOk: boolean | null
+    consecutiveFailures: number
+    restarts: { at: number; reason: string; ok: boolean }[]
+  }
   hasApiToken: boolean
   domains: { domain: string; primary: boolean; default: boolean; apps: number }[]
   dashboardUrl: string
@@ -165,17 +217,32 @@ export const api = {
     name: string
     slug?: string
     domain?: string
+    deployBranch?: string
+    previewsEnabled?: boolean
     sourceType: 'image' | 'compose'
     image?: string
     compose?: string
     primaryService?: string
     port: number
   }) => request<AppSummary>('POST', '/api/apps', body),
-  updateApp: (id: string, body: Partial<{ name: string; slug: string; domain: string; port: number; compose: string; primaryService: string }>) =>
+  updateApp: (id: string, body: Partial<{ name: string; slug: string; domain: string; port: number; compose: string; primaryService: string; deployBranch: string; previewsEnabled: boolean }>) =>
     request<AppSummary>('PATCH', `/api/apps/${id}`, body),
   deleteApp: (id: string, removeVolumes: boolean) =>
     request<{ ok: true }>('DELETE', `/api/apps/${id}?volumes=${removeVolumes}`),
   deploy: (id: string) => request<Deployment>('POST', `/api/apps/${id}/deploy`),
+  deploymentDiff: (id: string) => request<DeploymentDiff>('GET', `/api/deployments/${id}/diff`),
+  previews: (id: string) => request<AppSummary[]>('GET', `/api/apps/${id}/previews`),
+  addons: (id: string) => request<AddonInfo[]>('GET', `/api/apps/${id}/addons`),
+  addAddon: (id: string, type: AddonType) => request<{ ok: true; envKeys: string[]; note: string }>('POST', `/api/apps/${id}/addons`, { type }),
+  removeAddon: (id: string, type: AddonType) => request<{ ok: true; note: string }>('DELETE', `/api/apps/${id}/addons/${type}`),
+  hostnames: (id: string) => request<HostnameInfo[]>('GET', `/api/apps/${id}/hostnames`),
+  addHostname: (id: string, hostname: string) =>
+    request<SetupResult & { hostnames: HostnameInfo[] }>('POST', `/api/apps/${id}/hostnames`, { hostname }),
+  removeHostname: (id: string, hostname: string) =>
+    request<SetupResult & { hostnames: HostnameInfo[] }>('DELETE', `/api/apps/${id}/hostnames/${encodeURIComponent(hostname)}`),
+  updateStatus: (refresh = false) => request<UpdateStatus>('GET', `/api/update${refresh ? '?refresh=true' : ''}`),
+  applyUpdate: () => request<{ started: true }>('POST', '/api/update'),
+  updateLog: () => fetch('/api/update/log', { credentials: 'same-origin' }).then((r) => r.text()),
   action: (id: string, action: 'start' | 'stop' | 'restart') =>
     request<{ ok: true }>('POST', `/api/apps/${id}/actions/${action}`),
 
