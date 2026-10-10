@@ -52,7 +52,8 @@ export default function Environment({ app }: { app: AppDetail }) {
         <div>
           <h2 className="text-base font-semibold text-ink">Environment Variables</h2>
           <p className="text-xs text-ink-soft mt-0.5">
-            Encrypted at rest and injected into the <span className="font-medium text-ink">{app.primaryService}</span> service.
+            Encrypted at rest. Set in every service of the app on deploy, and used for{' '}
+            <span className="font-mono">{'${VAR}'}</span> placeholders in the compose file.
           </p>
         </div>
         {vars.length > 0 && (

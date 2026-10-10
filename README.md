@@ -285,9 +285,11 @@ Apps share one machine, so Dockyard rejects anything that reaches outside the ap
 - secrets and configs read from files
 - `traefik.*` and `dockyard.*` labels, and the `dockyard_edge` network
 
-Use images, named volumes and the Environment tab instead. The service that gets
-the address is joined to the shared `dockyard_edge` network; other services stay
-on the app's private network.
+Use images, named volumes and the Environment tab instead. Variables from the
+Environment tab are set in every service of the app at deploy time, except
+add-on containers, and they also fill `${VAR}` placeholders anywhere in the
+compose file. The service that gets the address is joined to the shared
+`dockyard_edge` network; other services stay on the app's private network.
 
 ### Cleaning up old images
 

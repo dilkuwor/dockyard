@@ -1,7 +1,8 @@
 import { config } from './config.js';
 import { decrypt, randomId } from './crypto.js';
 import { db, type AppRow, type DeploymentRow } from './db.js';
-import { compose, writeComposeFile } from './docker.js';
+import { compose, writeComposeFile, writeEnvFile } from './docker.js';
+import { addonsOf } from './addons.js';
 import { getServiceImage, renderCompose, setServiceImage } from './compose.js';
 import { notFound } from './errors.js';
 import { trackImages } from './images.js';
@@ -103,16 +104,19 @@ async function runDeployment(deploymentId: string): Promise<void> {
     log(`Deploying ${app.name} to ${appAddress(app)}`);
     if (deployment.image) log(`Image: ${deployment.image}`);
 
+    const env = appEnv(app);
     const rendered = renderCompose(deployment.compose, {
       appId: app.id,
       slug: app.slug,
       primaryService: app.primary_service,
       port: app.port,
-      env: appEnv(app),
+      env,
+      envSkip: addonsOf(app.id).map((a) => a.service),
       edgeNetwork: config.edgeNetwork,
       entrypoint: config.traefikEntrypoint,
     });
     writeComposeFile(app.id, rendered);
+    writeEnvFile(app.id, env);
 
     log('\n$ docker compose pull');
     const pull = await compose.pull(app.id, log);

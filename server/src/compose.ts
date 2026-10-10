@@ -169,6 +169,8 @@ export interface RenderOptions {
   primaryService: string;
   port: number;
   env: { key: string; value: string }[];
+  /** Services whose containers should not receive the app's variables, such as add-on databases. */
+  envSkip?: string[];
   edgeNetwork: string;
   entrypoint: string;
 }
@@ -206,11 +208,18 @@ export function renderCompose(composeText: string, opts: RenderOptions): string 
     primary.networks[EDGE_KEY] = {};
   }
 
+  // Every service of the app gets the variables, so a worker or API next to the routed
+  // service sees the same settings. They also fill ${VAR} placeholders anywhere in the file,
+  // through the .env file written beside it. Add-on containers are left as defined.
   if (opts.env.length) {
-    const env = envToMap(primary.environment);
-    // Escape "$" so compose doesn't try to interpolate secret values.
-    for (const { key, value } of opts.env) env[key] = value.replace(/\$/g, '$$$$');
-    primary.environment = env;
+    const skip = new Set(opts.envSkip ?? []);
+    for (const [name, svc] of Object.entries(doc.services)) {
+      if (skip.has(name)) continue;
+      const env = envToMap(svc.environment);
+      // Escape "$" so compose doesn't try to interpolate secret values.
+      for (const { key, value } of opts.env) env[key] = value.replace(/\$/g, '$$$$');
+      svc.environment = env;
+    }
   }
 
   doc.networks = { ...(doc.networks ?? {}), [EDGE_KEY]: { external: true, name: opts.edgeNetwork } };

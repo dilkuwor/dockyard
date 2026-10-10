@@ -63,6 +63,21 @@ export function writeComposeFile(appId: string, content: string): void {
   fs.writeFileSync(composePath(appId), content, { mode: 0o600 });
 }
 
+export const envFilePath = (appId: string) => path.join(appDir(appId), '.env');
+
+/**
+ * Writes the app's variables as the project's .env file, which docker compose reads for
+ * ${VAR} placeholders in the compose file. Values are double-quoted so "$", quotes and
+ * newlines survive; "$" is doubled because compose interpolates inside double quotes.
+ */
+export function writeEnvFile(appId: string, vars: { key: string; value: string }[]): void {
+  const quote = (value: string) =>
+    `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '$$$$').replace(/\r/g, '\\r').replace(/\n/g, '\\n')}"`;
+  const text = vars.map((v) => `${v.key}=${quote(v.value)}`).join('\n');
+  fs.mkdirSync(appDir(appId), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(envFilePath(appId), text ? `${text}\n` : '', { mode: 0o600 });
+}
+
 export function removeAppDir(appId: string): void {
   fs.rmSync(appDir(appId), { recursive: true, force: true });
 }

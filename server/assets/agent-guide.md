@@ -91,6 +91,10 @@ The `dockyard` command below sets all of this up in one step.
    dockyard redeploy
    ```
 
+   Variables are set in every service of the app at deploy time (add-on containers
+   excepted), and they fill `${VAR}` placeholders in the compose file. Never write
+   secrets into the compose file itself.
+
 5. **Verify.** `dockyard status` shows the address and container state; then request
    the address and check the response. `dockyard logs` prints recent container output.
 
