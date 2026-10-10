@@ -6,7 +6,8 @@ import { timeAgo, useResource } from '../lib'
 import PublicAccess from '../components/PublicAccess'
 import ChangePassword from '../components/ChangePassword'
 import SoftwareUpdate from '../components/SoftwareUpdate'
-import { IconRotateCw } from '../components/Icons'
+import Backups from '../components/Backups'
+import { IconRotateCw, IconDatabase } from '../components/Icons'
 
 const presets: { key: string; label: string; hint: string; tokenUrl?: string; tokenLabel?: string }[] = [
   {
@@ -93,6 +94,20 @@ export default function SettingsPage() {
           </div>
         </div>
         <ChangePassword />
+      </Card>
+
+      {/* Backups */}
+      <Card className="p-6 space-y-5">
+        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
+          <div className="rounded-md bg-accent/10 p-2 text-accent">
+            <IconDatabase className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-ink">Backups</h2>
+            <p className="text-xs text-ink-soft">Daily archives of Dockyard's settings and every app's data, kept on this machine.</p>
+          </div>
+        </div>
+        <Backups />
       </Card>
 
       {/* Software update */}

@@ -54,6 +54,8 @@ services:
       - dockyard-dynamic:/dynamic
       # The checkout itself, so the dashboard can check for and apply updates of Dockyard.
       - .:/src
+      # Backups land here. Point BACKUP_DIR at a disk you can copy off the machine.
+      - ${BACKUP_DIR:-./.data/backups}:/backups
     ports:
       # Direct local access to the dashboard, bypassing the proxy.
       - "127.0.0.1:3000:3000"

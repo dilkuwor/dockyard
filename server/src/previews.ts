@@ -64,14 +64,15 @@ export function findOrCreatePreview(parent: AppRow, branch: string, image: strin
     previews_enabled: 0,
     preview_of: parent.id,
     branch,
+    backup_enabled: 0,
     created_at: now,
     updated_at: now,
   };
   db.prepare(
     `INSERT INTO apps (id, name, slug, source_type, compose, primary_service, port, env_enc, hook_secret_enc,
-      current_deployment_id, domain, deploy_branch, previews_enabled, preview_of, branch, created_at, updated_at)
+      current_deployment_id, domain, deploy_branch, previews_enabled, preview_of, branch, backup_enabled, created_at, updated_at)
      VALUES (@id, @name, @slug, @source_type, @compose, @primary_service, @port, @env_enc, @hook_secret_enc,
-      @current_deployment_id, @domain, @deploy_branch, @previews_enabled, @preview_of, @branch, @created_at, @updated_at)`,
+      @current_deployment_id, @domain, @deploy_branch, @previews_enabled, @preview_of, @branch, @backup_enabled, @created_at, @updated_at)`,
   ).run(row);
   return row;
 }

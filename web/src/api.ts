@@ -40,6 +40,34 @@ export interface HostnameInfo {
   createdAt: number
 }
 
+export interface BackupSettings {
+  enabled: boolean
+  time: string
+  retention: number
+}
+
+export interface BackupSummary {
+  id: string
+  kind: 'scheduled' | 'manual'
+  status: 'running' | 'succeeded' | 'failed'
+  startedAt: number
+  finishedAt: number | null
+  size: number
+}
+
+export interface BackupDetail extends BackupSummary {
+  log: string
+  items: { appId: string; appName: string; size: number; status: 'succeeded' | 'failed' | 'empty'; detail: string | null }[]
+}
+
+export interface AppBackup {
+  backupId: string
+  startedAt: number
+  kind: string
+  size: number
+  detail: string | null
+}
+
 export interface UpdateStatus {
   running: string | null
   checkout: string | null
@@ -64,6 +92,7 @@ export interface AppSummary {
   previewsEnabled: boolean
   previewOf: string | null
   branch: string | null
+  backupEnabled: boolean
   sourceType: 'image' | 'compose'
   primaryService: string
   port: number
@@ -225,7 +254,7 @@ export const api = {
     primaryService?: string
     port: number
   }) => request<AppSummary>('POST', '/api/apps', body),
-  updateApp: (id: string, body: Partial<{ name: string; slug: string; domain: string; port: number; compose: string; primaryService: string; deployBranch: string; previewsEnabled: boolean }>) =>
+  updateApp: (id: string, body: Partial<{ name: string; slug: string; domain: string; port: number; compose: string; primaryService: string; deployBranch: string; previewsEnabled: boolean; backupEnabled: boolean }>) =>
     request<AppSummary>('PATCH', `/api/apps/${id}`, body),
   deleteApp: (id: string, removeVolumes: boolean) =>
     request<{ ok: true }>('DELETE', `/api/apps/${id}?volumes=${removeVolumes}`),
@@ -240,6 +269,14 @@ export const api = {
     request<SetupResult & { hostnames: HostnameInfo[] }>('POST', `/api/apps/${id}/hostnames`, { hostname }),
   removeHostname: (id: string, hostname: string) =>
     request<SetupResult & { hostnames: HostnameInfo[] }>('DELETE', `/api/apps/${id}/hostnames/${encodeURIComponent(hostname)}`),
+  backups: () =>
+    request<{ settings: BackupSettings; ready: boolean; directory: string; running: boolean; excluded: { id: string; name: string }[]; backups: BackupSummary[] }>('GET', '/api/backups'),
+  saveBackupSettings: (body: Partial<BackupSettings>) => request<BackupSettings>('PUT', '/api/backups/settings', body),
+  runBackup: () => request<{ id: string }>('POST', '/api/backups/run'),
+  backup: (id: string) => request<BackupDetail>('GET', `/api/backups/${id}`),
+  deleteBackup: (id: string) => request<{ ok: true }>('DELETE', `/api/backups/${id}`),
+  appBackups: (appId: string) => request<AppBackup[]>('GET', `/api/backups/app/${appId}`),
+  restoreBackup: (id: string, appId: string) => request<{ ok: boolean; log: string }>('POST', `/api/backups/${id}/restore/${appId}`),
   updateStatus: (refresh = false) => request<UpdateStatus>('GET', `/api/update${refresh ? '?refresh=true' : ''}`),
   applyUpdate: () => request<{ started: true }>('POST', '/api/update'),
   updateLog: () => fetch('/api/update/log', { credentials: 'same-origin' }).then((r) => r.text()),

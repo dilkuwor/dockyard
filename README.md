@@ -235,6 +235,19 @@ into its environment (`DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT` and friends).
 Deploy to start it. Removing an add-on takes the service and variables out again
 and keeps the Docker volume.
 
+### Backups
+
+**Settings → Backups** archives Dockyard's own settings (the database and the
+rendered compose files) and every app's data volumes into the backup directory,
+`.data/backups` next to the compose file unless `BACKUP_DIR` says otherwise. The
+Postgres add-on is dumped with `pg_dump` rather than copied, and other volumes are
+copied while the app is paused for a few seconds. Set a daily time and how many
+runs to keep, or click "Back up now". Previews are never included, and any app
+can be left out on its Settings tab. Restore an app's data from one of its backups
+on that same tab; the data it had is archived next to the backup first. Copy the
+backup directory off the machine, since a backup on the same disk only protects
+against mistakes, not against losing the machine.
+
 ### Updating Dockyard
 
 **Settings → Software update** shows the commit the running image was built from

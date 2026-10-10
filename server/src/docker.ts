@@ -75,6 +75,8 @@ export const compose = {
       { onLine },
     ),
   action: (appId: string, action: 'start' | 'stop' | 'restart') => run(composeArgs(appId, action)),
+  pause: (appId: string) => run(composeArgs(appId, 'pause')),
+  unpause: (appId: string) => run(composeArgs(appId, 'unpause')),
   down: (appId: string, removeVolumes: boolean) =>
     run(composeArgs(appId, 'down', '--remove-orphans', ...(removeVolumes ? ['--volumes'] : []))),
   logs: (appId: string, tail: number) =>

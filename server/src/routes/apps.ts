@@ -92,6 +92,7 @@ function toDto(app: AppRow) {
     previewsEnabled: app.previews_enabled === 1,
     previewOf: app.preview_of,
     branch: app.branch,
+    backupEnabled: app.backup_enabled === 1,
     sourceType: app.source_type,
     primaryService: app.primary_service,
     port: app.port,
@@ -223,14 +224,15 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
       previews_enabled: previewsEnabled,
       preview_of: null,
       branch: null,
+      backup_enabled: 1,
       created_at: now,
       updated_at: now,
     };
     db.prepare(
       `INSERT INTO apps (id, name, slug, source_type, compose, primary_service, port, env_enc, hook_secret_enc,
-        current_deployment_id, domain, deploy_branch, previews_enabled, preview_of, branch, created_at, updated_at)
+        current_deployment_id, domain, deploy_branch, previews_enabled, preview_of, branch, backup_enabled, created_at, updated_at)
        VALUES (@id, @name, @slug, @source_type, @compose, @primary_service, @port, @env_enc, @hook_secret_enc,
-        @current_deployment_id, @domain, @deploy_branch, @previews_enabled, @preview_of, @branch, @created_at, @updated_at)`,
+        @current_deployment_id, @domain, @deploy_branch, @previews_enabled, @preview_of, @branch, @backup_enabled, @created_at, @updated_at)`,
     ).run(row);
 
     if (body.deploy !== false) enqueueDeploy(row.id, { trigger: 'create' });
@@ -254,14 +256,15 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     const deployBranch = body.deployBranch !== undefined ? validBranch(body.deployBranch) : row.deploy_branch;
     const previewsEnabled = body.previewsEnabled !== undefined ? (body.previewsEnabled === true ? 1 : 0) : row.previews_enabled;
     if (previewsEnabled === 1 && row.preview_of) throw badRequest('A preview cannot have previews of its own.');
+    const backupEnabled = body.backupEnabled !== undefined ? (body.backupEnabled === true ? 1 : 0) : row.backup_enabled;
     const composeText = body.compose !== undefined ? String(body.compose) : row.compose;
     const primaryService =
       body.primaryService !== undefined ? String(body.primaryService).trim() : row.primary_service;
 
     validateCompose(parseCompose(composeText), primaryService);
     db.prepare(
-      'UPDATE apps SET name = ?, slug = ?, domain = ?, port = ?, compose = ?, primary_service = ?, deploy_branch = ?, previews_enabled = ?, updated_at = ? WHERE id = ?',
-    ).run(name, slug, domain, port, composeText, primaryService, deployBranch, previewsEnabled, Date.now(), row.id);
+      'UPDATE apps SET name = ?, slug = ?, domain = ?, port = ?, compose = ?, primary_service = ?, deploy_branch = ?, previews_enabled = ?, backup_enabled = ?, updated_at = ? WHERE id = ?',
+    ).run(name, slug, domain, port, composeText, primaryService, deployBranch, previewsEnabled, backupEnabled, Date.now(), row.id);
     return toDto(getApp(row.id));
   });
 

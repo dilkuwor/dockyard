@@ -5,6 +5,7 @@ import { useResource } from '../../lib'
 import { Button, Card, ErrorNote, Field, Section, Select, TextArea, TextInput } from '../../components/ui'
 import Addons from '../../components/Addons'
 import Hostnames from '../../components/Hostnames'
+import RestoreBackup from '../../components/RestoreBackup'
 
 export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: () => void }) {
   const navigate = useNavigate()
@@ -13,6 +14,7 @@ export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: ()
   const [domain, setDomain] = useState(app.domain ?? '')
   const [deployBranch, setDeployBranch] = useState(app.deployBranch ?? '')
   const [previewsEnabled, setPreviewsEnabled] = useState(app.previewsEnabled)
+  const [backupEnabled, setBackupEnabled] = useState(app.backupEnabled)
   const { data: meta } = useResource(api.meta, [])
   const domains = meta?.domains ?? []
   const [port, setPort] = useState(String(app.port))
@@ -31,7 +33,7 @@ export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: ()
     setError(null)
     setSaved('')
     try {
-      await api.updateApp(app.id, { name, slug, domain, port: Number(port), primaryService, compose, deployBranch, previewsEnabled })
+      await api.updateApp(app.id, { name, slug, domain, port: Number(port), primaryService, compose, deployBranch, previewsEnabled, backupEnabled })
       if (deploy) {
         await api.deploy(app.id)
         navigate(`/apps/${app.id}/deployments`)
@@ -128,6 +130,23 @@ export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: ()
           <Hostnames app={app} onChange={onSaved} />
         </Card>
       </Section>
+
+      {!app.previewOf && (
+        <Section title="Backups">
+          <Card className="space-y-4 p-5">
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={backupEnabled} onChange={(e) => setBackupEnabled(e.target.checked)} className="mt-0.5 size-4 accent-ink" />
+              <span>
+                Include this app's data in backups
+                <span className="block text-xs text-ink-soft">Off means the daily run skips this app. Saved with the settings above.</span>
+              </span>
+            </label>
+            <div className="border-t border-rule pt-4">
+              <RestoreBackup app={app} onChange={onSaved} />
+            </div>
+          </Card>
+        </Section>
+      )}
 
       <Section title="Delete app">
         <div className="rounded-lg border border-port/30 bg-panel p-5">

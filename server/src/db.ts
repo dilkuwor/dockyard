@@ -79,6 +79,28 @@ CREATE TABLE IF NOT EXISTS hostnames (
   created_at INTEGER NOT NULL
 );
 
+-- Backup runs and what each one holds per app. Files live under the backup directory.
+CREATE TABLE IF NOT EXISTS backups (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('scheduled', 'manual')),
+  status TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'failed')),
+  started_at INTEGER NOT NULL,
+  finished_at INTEGER,
+  size INTEGER NOT NULL DEFAULT 0,
+  log TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS backup_items (
+  backup_id TEXT NOT NULL REFERENCES backups(id) ON DELETE CASCADE,
+  app_id TEXT NOT NULL,
+  app_name TEXT NOT NULL,
+  file TEXT,
+  size INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed', 'empty')),
+  detail TEXT,
+  PRIMARY KEY (backup_id, app_id)
+);
+
 -- Managed add-on services (Postgres, Redis, MinIO) Dockyard put into an app's compose file.
 CREATE TABLE IF NOT EXISTS addons (
   app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
@@ -102,6 +124,8 @@ addColumn('apps', 'deploy_branch', 'TEXT');
 addColumn('apps', 'previews_enabled', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('apps', 'preview_of', 'TEXT');
 addColumn('apps', 'branch', 'TEXT');
+// Whether the app's data is included in backups. Previews never are.
+addColumn('apps', 'backup_enabled', 'INTEGER NOT NULL DEFAULT 1');
 // Deploy notes: what the hook told us, and the environment as it was for this deployment.
 addColumn('deployments', 'commit_message', 'TEXT');
 addColumn('deployments', 'branch', 'TEXT');
@@ -123,6 +147,7 @@ export interface AppRow {
   previews_enabled: number;
   preview_of: string | null;
   branch: string | null;
+  backup_enabled: number;
   created_at: number;
   updated_at: number;
 }

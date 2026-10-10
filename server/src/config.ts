@@ -18,6 +18,8 @@ export const config = {
   appsDir: path.join(dataDir, 'apps'),
   // Shared with Traefik's file provider: one router file per app for custom hostnames.
   dynamicDir: process.env.DYNAMIC_DIR ?? '/dynamic',
+  // Where backup runs are written; docker-compose.yml bind-mounts it from the host.
+  backupDir: process.env.BACKUP_DIR ?? '/backups',
   publicDir: process.env.PUBLIC_DIR ?? path.resolve('public'),
   assetsDir: process.env.ASSETS_DIR ?? path.resolve('assets'),
   // The dashboard is served at <dashboardSubdomain>.<domain>, on the local address and the public one.

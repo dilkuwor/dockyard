@@ -21,6 +21,8 @@ import { agentRoutes } from './routes/agent.js';
 import { githubRoutes } from './routes/github.js';
 import { extrasRoutes } from './routes/extras.js';
 import { updateRoutes } from './routes/update.js';
+import { backupRoutes } from './routes/backups.js';
+import { startBackupScheduler } from './backup.js';
 import { syncHostnameRoutes } from './hostnames.js';
 import { registryRoutes } from './routes/registries.js';
 import { cloudflareRoutes } from './routes/cloudflare.js';
@@ -74,6 +76,7 @@ await server.register(cloudflareRoutes);
 await server.register(githubRoutes);
 await server.register(extrasRoutes);
 await server.register(updateRoutes);
+await server.register(backupRoutes);
 server.get('/api/health', async () => ({ ok: true }));
 
 const indexHtml = path.join(config.publicDir, 'index.html');
@@ -98,6 +101,7 @@ if (await dockerAvailable()) {
   await ensureConnector().catch((err) => server.log.warn(err.message));
   void trackDeployedImages().catch((err) => server.log.warn(err.message));
   startWatchdog((msg) => server.log.warn(msg));
+  startBackupScheduler((msg) => server.log.warn(msg));
 } else {
   server.log.warn('Docker is not reachable. Mount /var/run/docker.sock to manage apps.');
 }
