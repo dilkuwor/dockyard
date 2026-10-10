@@ -430,12 +430,12 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
             </span>
           </div>
 
-          {update && update.behind !== null && update.behind > 0 && (
+          {update?.updateAvailable && !update.running.local && (
             <Link
               to="/settings"
               className={cx('block rounded-md px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/10', collapsed && 'md:hidden')}
             >
-              Update available: {update.behind} new commit{update.behind === 1 ? '' : 's'}
+              Update available{update.commits.length ? `: ${update.commits.length} new commit${update.commits.length === 1 ? '' : 's'}` : ''}
             </Link>
           )}
         </div>

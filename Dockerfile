@@ -28,10 +28,11 @@ RUN apt-get update \
 
 WORKDIR /app
 ENV NODE_ENV=production DATA_DIR=/data PUBLIC_DIR=/app/public ASSETS_DIR=/app/assets
-# Record the commit this image was built from (only HEAD and refs are in the build context), for self-update.
-COPY .git /tmp/git
-RUN node -e "const fs=require('fs');let s='unknown';try{const h=fs.readFileSync('/tmp/git/HEAD','utf8').trim();if(/^[0-9a-f]{40}$/.test(h))s=h;else{const r=h.replace(/^ref:\s*/,'');try{s=fs.readFileSync('/tmp/git/'+r,'utf8').trim()}catch{const p=fs.readFileSync('/tmp/git/packed-refs','utf8').split('\n').find(l=>l.endsWith(' '+r));if(p)s=p.split(' ')[0]}}}catch{}fs.writeFileSync('/app/BUILD_SHA',s)" \
-  && rm -rf /tmp/git && echo "Built from $(cat /app/BUILD_SHA)"
+# The publish workflow passes the commit; the dashboard's Software update card shows it and lists what is newer.
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision=$GIT_SHA \
+      org.opencontainers.image.source=https://github.com/dilkuwor/dockyard \
+      org.opencontainers.image.title=dockyard
 COPY --from=server /server/package.json ./
 COPY --from=server /server/node_modules ./node_modules
 COPY --from=server /server/dist ./dist

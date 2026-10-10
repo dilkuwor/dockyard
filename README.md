@@ -48,7 +48,7 @@ You need Docker with the compose plugin.
 ```bash
 cp .env.example .env
 openssl rand -hex 32          # paste into DOCKYARD_SECRET
-docker compose up -d --build
+docker compose up -d          # pulls the published image; add --build to build it here
 docker compose logs dockyard  # shows the one-time setup code
 ```
 
@@ -250,12 +250,20 @@ against mistakes, not against losing the machine.
 
 ### Updating Dockyard
 
-**Settings → Software update** shows the commit the running image was built from
-and what is newer on the repository's branch, and updates in place: a helper
-container pulls the checkout forward and rebuilds only the `dockyard` service, so
-apps keep running and the dashboard is away for about a minute. This needs the
-checkout mounted at `/src`, which `docker-compose.yml` now does; after pulling a
-version that adds it, run `docker compose up -d --build` by hand once.
+Every push to `main` publishes `ghcr.io/dilkuwor/dockyard:latest`, labelled with
+the commit it was built from. **Settings → Software update** compares the digest
+of the running image with what the registry serves for that tag, lists the commits
+that are newer, and updates in place: a helper container runs `docker compose pull`
+and `docker compose up -d` for the `dockyard` service, then removes the old image.
+Apps keep running; the dashboard is away for about a minute. The same thing by hand:
+
+```bash
+docker compose pull dockyard && docker compose up -d dockyard
+```
+
+An install that builds the image itself (`docker compose up -d --build`) shows as
+"built on this machine"; updating it switches it to the published image. If the
+package is private, add credentials for ghcr.io under Settings first.
 
 ### Private images
 

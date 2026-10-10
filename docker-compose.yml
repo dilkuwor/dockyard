@@ -39,8 +39,9 @@ services:
 
   # The control plane: API, dashboard and deploy hooks.
   dockyard:
+    # The published image. `docker compose up -d` pulls it; `--build` builds from this checkout instead.
+    image: ${DOCKYARD_IMAGE:-ghcr.io/dilkuwor/dockyard:latest}
     build: .
-    image: dockyard:local
     env_file: .env
     environment:
       DATA_DIR: /data
@@ -52,8 +53,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - dockyard-data:/data
       - dockyard-dynamic:/dynamic
-      # The checkout itself, so the dashboard can check for and apply updates of Dockyard.
-      - .:/src
       # Backups land here. Point BACKUP_DIR at a disk you can copy off the machine.
       - ${BACKUP_DIR:-./.data/backups}:/backups
     ports:

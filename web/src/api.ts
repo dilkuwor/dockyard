@@ -69,11 +69,11 @@ export interface AppBackup {
 }
 
 export interface UpdateStatus {
-  running: string | null
-  checkout: string | null
+  image: string | null
+  running: { digest: string | null; revision: string | null; local: boolean }
+  latest: { digest: string | null }
+  updateAvailable: boolean | null
   repo: { owner: string; name: string; branch: string } | null
-  latest: string | null
-  behind: number | null
   commits: { sha: string; message: string; date: string; author: string }[]
   checkedAt: number | null
   blocked: string | null

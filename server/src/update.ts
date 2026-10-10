@@ -1,80 +1,142 @@
 import { execFile } from 'node:child_process';
-import fs from 'node:fs';
 import os from 'node:os';
-import path from 'node:path';
 import { promisify } from 'node:util';
 import { decrypt } from './crypto.js';
 import { getSetting } from './db.js';
 import { HttpError, badRequest } from './errors.js';
+import { credentials } from './registries.js';
 
 const exec = promisify(execFile);
 
 /**
- * Self-update. The image records the commit it was built from; the checkout the stack runs
- * from is mounted at /src. Updates are found through the GitHub API and applied by a helper
- * container that pulls the checkout forward and runs `docker compose up -d --build` for the
- * dockyard service, since this process cannot rebuild and replace itself from the inside.
+ * Self-update from the published image. The running container's image reference, such as
+ * ghcr.io/dilkuwor/dockyard:latest, is compared with what the registry currently has behind
+ * that tag. Applying an update is what you would do by hand: `docker compose pull` and
+ * `docker compose up -d` for the dockyard service, run by a helper container because this
+ * process cannot replace itself. Old images of Dockyard that nothing uses are removed after.
  */
-const SRC = process.env.SRC_DIR ?? '/src';
-const BUILD_SHA_FILE = process.env.BUILD_SHA_FILE ?? '/app/BUILD_SHA';
 const UPDATER = 'dockyard-updater';
 const CHECK_TTL_MS = 30 * 60_000;
+const ACCEPT = [
+  'application/vnd.oci.image.index.v1+json',
+  'application/vnd.docker.distribution.manifest.list.v2+json',
+  'application/vnd.oci.image.manifest.v1+json',
+  'application/vnd.docker.distribution.manifest.v2+json',
+].join(', ');
 
 export interface UpdateStatus {
-  /** The commit the running image was built from, or null when the image was built without it. */
-  running: string | null;
-  /** HEAD of the checkout at /src, or null when it is not mounted. */
-  checkout: string | null;
+  /** The image this container runs from, as written in the compose file. */
+  image: string | null;
+  running: {
+    /** The registry digest of the running image, or null for an image built locally. */
+    digest: string | null;
+    /** The commit the image was built from, from its label, when the publisher set it. */
+    revision: string | null;
+    local: boolean;
+  };
+  latest: { digest: string | null };
+  updateAvailable: boolean | null;
   repo: { owner: string; name: string; branch: string } | null;
-  latest: string | null;
-  behind: number | null;
+  /** Commits newer than the running revision, for the "what's new" list. */
   commits: { sha: string; message: string; date: string; author: string }[];
   checkedAt: number | null;
-  /** Why an update cannot be checked or applied, if it cannot. */
   blocked: string | null;
   updater: { state: 'idle' | 'running' | 'done' | 'failed'; startedAt: number | null };
 }
 
-const cache: { at: number; result: Omit<UpdateStatus, 'updater' | 'running' | 'checkout'> | null } = { at: 0, result: null };
-
-export function buildSha(): string | null {
-  try {
-    const sha = fs.readFileSync(BUILD_SHA_FILE, 'utf8').trim();
-    return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
-  } catch {
-    return null;
-  }
+interface Self {
+  image: string;
+  imageId: string;
+  digest: string | null;
+  revision: string | null;
+  source: string | null;
+  workingDir: string;
+  configFiles: string[];
 }
 
-/** Resolves HEAD of the mounted checkout without git: a ref file or packed-refs. */
-export function checkoutSha(): string | null {
-  try {
-    const head = fs.readFileSync(path.join(SRC, '.git', 'HEAD'), 'utf8').trim();
-    if (/^[0-9a-f]{40}$/.test(head)) return head;
-    const ref = head.replace(/^ref:\s*/, '');
-    const refFile = path.join(SRC, '.git', ref);
-    if (fs.existsSync(refFile)) return fs.readFileSync(refFile, 'utf8').trim();
-    const packed = fs.readFileSync(path.join(SRC, '.git', 'packed-refs'), 'utf8');
-    const line = packed.split('\n').find((l) => l.endsWith(` ${ref}`));
-    return line ? line.split(' ')[0] : null;
-  } catch {
-    return null;
-  }
+const cache: { at: number; image: string; latest: string | null; blocked: string | null; commits: UpdateStatus['commits'] } = {
+  at: 0,
+  image: '',
+  latest: null,
+  blocked: null,
+  commits: [],
+};
+
+/** Everything about this very container that the update needs, from Docker's own metadata. */
+async function self(): Promise<Self> {
+  const fmt = [
+    '{{.Config.Image}}',
+    '{{.Image}}',
+    '{{index .Config.Labels "com.docker.compose.project.working_dir"}}',
+    '{{index .Config.Labels "com.docker.compose.project.config_files"}}',
+  ].join('|');
+  const { stdout } = await exec('docker', ['inspect', '--format', fmt, os.hostname()]);
+  const [image, imageId, workingDir, files] = stdout.trim().split('|');
+  const img = await exec('docker', [
+    'image',
+    'inspect',
+    '--format',
+    '{{join .RepoDigests ","}}|{{index .Config.Labels "org.opencontainers.image.revision"}}|{{index .Config.Labels "org.opencontainers.image.source"}}',
+    imageId,
+  ]);
+  const [digests, revision, source] = img.stdout.trim().split('|');
+  const repo = image.split('@')[0].replace(/:[^/]+$/, '');
+  const digest = digests.split(',').map((d) => d.trim()).find((d) => d.startsWith(`${repo}@`))?.split('@')[1] ?? null;
+  return {
+    image,
+    imageId,
+    digest,
+    revision: revision && revision !== 'unknown' ? revision : null,
+    source: source || null,
+    workingDir,
+    configFiles: files ? files.split(',') : [],
+  };
 }
 
-/** Which GitHub repository and branch the checkout follows, from its own git metadata. */
-export function repoInfo(): UpdateStatus['repo'] {
-  try {
-    const head = fs.readFileSync(path.join(SRC, '.git', 'HEAD'), 'utf8').trim();
-    const branch = head.startsWith('ref: refs/heads/') ? head.slice('ref: refs/heads/'.length) : 'main';
-    const cfg = fs.readFileSync(path.join(SRC, '.git', 'config'), 'utf8');
-    const origin = /\[remote "origin"\][^[]*?url\s*=\s*(\S+)/.exec(cfg)?.[1] ?? '';
-    const m = /github\.com[:/]([^/]+)\/([^/\s]+?)(?:\.git)?$/.exec(origin);
-    if (!m) return null;
-    return { owner: m[1], name: m[2], branch };
-  } catch {
-    return null;
+/** Splits "ghcr.io/owner/name:tag" into its parts; Docker Hub shorthand gets its real registry and namespace. */
+function parseRef(ref: string): { host: string; repo: string; tag: string } {
+  const [path, tag = 'latest'] = ref.split('@')[0].split(/:(?=[^/]+$)/);
+  const parts = path.split('/');
+  const hasHost = parts.length > 1 && (parts[0].includes('.') || parts[0].includes(':') || parts[0] === 'localhost');
+  const host = hasHost ? parts[0] : 'registry-1.docker.io';
+  let repo = hasHost ? parts.slice(1).join('/') : path;
+  if (!hasHost && !repo.includes('/')) repo = `library/${repo}`;
+  return { host, repo, tag };
+}
+
+/** The digest the registry serves for a tag right now, with token auth discovered from the registry itself. */
+async function registryDigest(ref: string): Promise<string> {
+  const { host, repo, tag } = parseRef(ref);
+  const url = `https://${host}/v2/${repo}/manifests/${encodeURIComponent(tag)}`;
+  const cred = credentials().find((c) => c.registry === (host === 'registry-1.docker.io' ? 'docker.io' : host));
+  const basic = cred ? `Basic ${Buffer.from(`${cred.username}:${cred.token}`).toString('base64')}` : null;
+
+  let res = await fetch(url, { method: 'HEAD', headers: { Accept: ACCEPT, ...(basic ? { Authorization: basic } : {}) }, signal: AbortSignal.timeout(15_000) });
+  if (res.status === 401) {
+    const challenge = res.headers.get('www-authenticate') ?? '';
+    const realm = /realm="([^"]+)"/.exec(challenge)?.[1];
+    const service = /service="([^"]+)"/.exec(challenge)?.[1];
+    const scope = /scope="([^"]+)"/.exec(challenge)?.[1] ?? `repository:${repo}:pull`;
+    if (!realm) throw new Error(`${host} wants authentication but did not say how.`);
+    const tokenUrl = `${realm}?service=${encodeURIComponent(service ?? host)}&scope=${encodeURIComponent(scope)}`;
+    const tokenRes = await fetch(tokenUrl, { headers: basic ? { Authorization: basic } : {}, signal: AbortSignal.timeout(15_000) });
+    if (!tokenRes.ok) {
+      throw new Error(
+        tokenRes.status === 401 || tokenRes.status === 403
+          ? `${host} refused access to ${repo}. If the package is private, add credentials for ${host} under Settings, or make the package public.`
+          : `${host} token service answered ${tokenRes.status}.`,
+      );
+    }
+    const token = ((await tokenRes.json()) as { token?: string; access_token?: string });
+    const bearer = token.token ?? token.access_token;
+    if (!bearer) throw new Error(`${host} did not return a token.`);
+    res = await fetch(url, { method: 'HEAD', headers: { Accept: ACCEPT, Authorization: `Bearer ${bearer}` }, signal: AbortSignal.timeout(15_000) });
   }
+  if (res.status === 404) throw new Error(`${ref} does not exist in the registry.`);
+  if (!res.ok) throw new Error(`${host} answered ${res.status} for ${repo}:${tag}.`);
+  const digest = res.headers.get('docker-content-digest');
+  if (!digest) throw new Error(`${host} did not return a digest for ${repo}:${tag}.`);
+  return digest;
 }
 
 function githubToken(): string | null {
@@ -87,20 +149,29 @@ function githubToken(): string | null {
   }
 }
 
-async function fetchCommits(repo: NonNullable<UpdateStatus['repo']>): Promise<{ sha: string; message: string; date: string; author: string }[]> {
+/** The GitHub repository behind the image: from its source label, or ghcr.io's owner/name. */
+function repoFor(s: Self): UpdateStatus['repo'] {
+  const m = /github\.com\/([^/]+)\/([^/\s]+?)(?:\.git)?$/.exec(s.source ?? '');
+  if (m) return { owner: m[1], name: m[2], branch: 'main' };
+  const ref = parseRef(s.image);
+  if (ref.host === 'ghcr.io') {
+    const [owner, name] = ref.repo.split('/');
+    if (owner && name) return { owner, name, branch: 'main' };
+  }
+  return null;
+}
+
+async function commitsSince(repo: NonNullable<UpdateStatus['repo']>, revision: string | null): Promise<UpdateStatus['commits']> {
   const token = githubToken();
   const res = await fetch(`https://api.github.com/repos/${repo.owner}/${repo.name}/commits?sha=${encodeURIComponent(repo.branch)}&per_page=50`, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'dockyard',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'dockyard', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     signal: AbortSignal.timeout(15_000),
   });
-  if (res.status === 404) throw new Error(`GitHub cannot see ${repo.owner}/${repo.name}. For a private repository, add a GitHub token under GitHub & Deploy Hooks.`);
-  if (!res.ok) throw new Error(`GitHub answered with status ${res.status}.`);
+  if (!res.ok) return [];
   const list = (await res.json()) as { sha: string; commit: { message: string; author?: { date?: string; name?: string } } }[];
-  return list.map((c) => ({ sha: c.sha, message: c.commit.message.split('\n')[0].slice(0, 200), date: c.commit.author?.date ?? '', author: c.commit.author?.name ?? '' }));
+  const commits = list.map((c) => ({ sha: c.sha, message: c.commit.message.split('\n')[0].slice(0, 200), date: c.commit.author?.date ?? '', author: c.commit.author?.name ?? '' }));
+  const index = revision ? commits.findIndex((c) => c.sha === revision) : -1;
+  return index === -1 ? commits.slice(0, 10) : commits.slice(0, index);
 }
 
 async function updaterState(): Promise<UpdateStatus['updater']> {
@@ -114,83 +185,69 @@ async function updaterState(): Promise<UpdateStatus['updater']> {
 }
 
 export async function updateStatus(refresh = false): Promise<UpdateStatus> {
-  const running = buildSha();
-  const checkout = checkoutSha();
   const updater = await updaterState();
-  const repo = repoInfo();
-  const base = { running, checkout, updater };
-
-  if (!fs.existsSync(path.join(SRC, '.git'))) {
-    return { ...base, repo: null, latest: null, behind: null, commits: [], checkedAt: null, blocked: 'The checkout is not mounted at /src. Pull the latest docker-compose.yml and run docker compose up -d once by hand.' };
-  }
-  if (!repo) {
-    return { ...base, repo: null, latest: null, behind: null, commits: [], checkedAt: null, blocked: 'The checkout has no GitHub remote named origin, so there is nothing to check against.' };
-  }
-
-  if (!refresh && cache.result && Date.now() - cache.at < CHECK_TTL_MS) return { ...base, ...cache.result };
-
-  const reference = running ?? checkout;
-  let result: Omit<UpdateStatus, 'updater' | 'running' | 'checkout'>;
+  let s: Self;
   try {
-    const commits = await fetchCommits(repo);
-    const index = reference ? commits.findIndex((c) => c.sha === reference) : -1;
-    const ahead = index === -1 ? commits : commits.slice(0, index);
-    result = {
-      repo,
-      latest: commits[0]?.sha ?? null,
-      behind: reference && index === -1 ? null : ahead.length,
-      commits: ahead,
-      checkedAt: Date.now(),
-      blocked: running ? null : 'The running image was built without its commit recorded, so "behind" is measured from the checkout instead. The next update fixes that.',
-    };
+    s = await self();
   } catch (err) {
-    result = { repo, latest: null, behind: null, commits: [], checkedAt: Date.now(), blocked: (err as Error).message };
+    return {
+      image: null, running: { digest: null, revision: null, local: true }, latest: { digest: null }, updateAvailable: null, repo: null,
+      commits: [], checkedAt: null, blocked: `Could not inspect this container: ${(err as Error).message}`, updater,
+    };
   }
-  cache.at = Date.now();
-  cache.result = result;
-  return { ...base, ...result };
-}
+  const repo = repoFor(s);
+  const base = { image: s.image, running: { digest: s.digest, revision: s.revision, local: s.digest === null }, repo, updater };
+  const { host } = parseRef(s.image);
+  if (!s.image.includes('/') || host === 'localhost') {
+    return { ...base, latest: { digest: null }, updateAvailable: null, commits: [], checkedAt: null, blocked: `This Dockyard runs a locally built image (${s.image}). Updates come from a published image; point the compose file at one to use this.` };
+  }
 
-/** The host path and compose files of this very container, from the labels compose put on it. */
-async function ownCompose(): Promise<{ workingDir: string; configFiles: string[] }> {
-  const { stdout } = await exec('docker', [
-    'inspect',
-    '--format',
-    '{{index .Config.Labels "com.docker.compose.project.working_dir"}}|{{index .Config.Labels "com.docker.compose.project.config_files"}}',
-    os.hostname(),
-  ]);
-  const [workingDir, files] = stdout.trim().split('|');
-  if (!workingDir) throw new HttpError(500, 'Could not find the compose project this Dockyard runs from.');
-  return { workingDir, configFiles: files ? files.split(',') : [] };
+  if (!refresh && cache.image === s.image && Date.now() - cache.at < CHECK_TTL_MS) {
+    return { ...base, latest: { digest: cache.latest }, updateAvailable: cache.latest ? cache.latest !== s.digest : null, commits: cache.commits, checkedAt: cache.at, blocked: cache.blocked };
+  }
+
+  let latest: string | null = null;
+  let blocked: string | null = null;
+  let commits: UpdateStatus['commits'] = [];
+  try {
+    latest = await registryDigest(s.image);
+    if (repo) commits = await commitsSince(repo, s.revision).catch(() => []);
+    if (s.digest === null) blocked = 'The running image was built on this machine, so it cannot be matched against the registry. Updating replaces it with the published image.';
+  } catch (err) {
+    blocked = (err as Error).message;
+  }
+  Object.assign(cache, { at: Date.now(), image: s.image, latest, blocked, commits });
+  return { ...base, latest: { digest: latest }, updateAvailable: latest ? latest !== s.digest : null, commits, checkedAt: cache.at, blocked };
 }
 
 /**
- * Starts the helper that pulls the checkout forward and rebuilds the dockyard service.
- * This request returns at once; the dashboard goes away for a minute while the new image starts.
+ * Starts the helper that pulls the published image, recreates the dockyard service from it,
+ * and removes Dockyard images that nothing uses any more. Returns at once; the dashboard is
+ * away for a minute while the new container starts.
  */
 export async function applyUpdate(): Promise<{ started: true }> {
   const status = await updateStatus();
-  if (status.blocked && status.running) throw badRequest(status.blocked);
-  if (!status.repo) throw badRequest('There is no repository to update from.');
   if (status.updater.state === 'running') throw badRequest('An update is already running.');
+  if (!status.image || status.latest.digest === null) throw badRequest(status.blocked ?? 'Could not determine the published image.');
+  const s = await self();
+  if (!s.workingDir) throw new HttpError(500, 'Could not find the compose project this Dockyard runs from.');
+  const { host } = parseRef(s.image);
+  const cred = credentials().find((c) => c.registry === (host === 'registry-1.docker.io' ? 'docker.io' : host));
+  const repo = s.image.split('@')[0].replace(/:[^/]+$/, '');
+  const composeFiles = s.configFiles.flatMap((f) => ['-f', f]);
 
-  const { workingDir, configFiles } = await ownCompose();
-  const token = githubToken();
-  const remote = token
-    ? `https://x-access-token:${token}@github.com/${status.repo.owner}/${status.repo.name}.git`
-    : `https://github.com/${status.repo.owner}/${status.repo.name}.git`;
-  const composeFiles = configFiles.flatMap((f) => ['-f', f]);
   const script = [
     'set -e',
-    "git config --global --add safe.directory '*'",
-    'OWNER_UID=$(stat -c %u .); OWNER_GID=$(stat -c %g .)',
-    'echo "Fetching $BRANCH from GitHub"',
-    'git fetch --quiet "$REMOTE" "$BRANCH"',
-    'git merge --ff-only FETCH_HEAD',
-    'chown -R "$OWNER_UID:$OWNER_GID" .git',
-    'git diff --name-only ORIG_HEAD HEAD 2>/dev/null | xargs -r chown "$OWNER_UID:$OWNER_GID" || true',
-    'echo "Now at $(git rev-parse --short HEAD). Rebuilding dockyard."',
-    `docker compose ${composeFiles.join(' ')} up -d --build dockyard`,
+    '[ -z "$REGISTRY_USER" ] || echo "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin',
+    `echo "Pulling ${s.image}"`,
+    `docker compose ${composeFiles.join(' ')} pull --quiet dockyard`,
+    'echo "Recreating the dockyard service from the new image"',
+    `docker compose ${composeFiles.join(' ')} up -d --no-build dockyard`,
+    'sleep 2',
+    'echo "Removing Dockyard images that are no longer used"',
+    // The previous image loses its tag when the pull moves it, so it is named by id; any other stale tags of the repo go too.
+    '[ -z "$OLD_IMAGE" ] || docker image rm "$OLD_IMAGE" >/dev/null 2>&1 && echo "  removed the previous image" || true',
+    `for id in $(docker images "${repo}" -q | sort -u); do docker image rm "$id" >/dev/null 2>&1 && echo "  removed $id" || true; done`,
     'echo "Update finished."',
   ].join('\n');
 
@@ -198,20 +255,22 @@ export async function applyUpdate(): Promise<{ started: true }> {
   await exec('docker', [
     'run', '-d', '--name', UPDATER,
     '-v', '/var/run/docker.sock:/var/run/docker.sock',
-    '-v', `${workingDir}:${workingDir}`,
-    '-w', workingDir,
-    '-e', `REMOTE=${remote}`,
-    '-e', `BRANCH=${status.repo.branch}`,
+    '-v', `${s.workingDir}:${s.workingDir}`,
+    '-w', s.workingDir,
+    '-e', `REGISTRY=${host === 'registry-1.docker.io' ? 'docker.io' : host}`,
+    '-e', `REGISTRY_USER=${cred?.username ?? ''}`,
+    '-e', `REGISTRY_TOKEN=${cred?.token ?? ''}`,
+    '-e', `OLD_IMAGE=${s.imageId}`,
     'docker:cli', 'sh', '-c', script,
   ]);
-  cache.result = null;
+  cache.at = 0;
   return { started: true };
 }
 
 export async function updateLog(): Promise<string> {
   try {
     const { stdout, stderr } = await exec('docker', ['logs', '--tail', '200', UPDATER]);
-    return (stdout + stderr).replace(/x-access-token:[^@]+@/g, 'x-access-token:***@');
+    return stdout + stderr;
   } catch {
     return '';
   }

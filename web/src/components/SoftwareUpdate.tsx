@@ -4,9 +4,9 @@ import { Button, ErrorNote } from './ui'
 import { IconCheck, IconRotateCw } from './Icons'
 import { timeAgo, useResource } from '../lib'
 
-const short = (sha: string | null) => (sha ? sha.slice(0, 7) : '—')
+const short = (value: string | null) => (value ? value.replace(/^sha256:/, '').slice(0, 12) : '—')
 
-/** Settings card: which commit runs, what is newer on GitHub, and a button to update in place. */
+/** Settings card: which published image runs, whether the registry has a newer one, and a button to update in place. */
 export default function SoftwareUpdate() {
   const { data: status, error, reload, setData } = useResource(api.updateStatus, [])
   const [busy, setBusy] = useState<'check' | 'apply' | null>(null)
@@ -55,47 +55,49 @@ export default function SoftwareUpdate() {
   }
 
   if (!status) return <ErrorNote error={error} />
-  const upToDate = status.behind === 0
-  const canUpdate = !status.blocked || (status.running === null && status.repo !== null)
+  const canApply = status.latest.digest !== null && (status.updateAvailable === true || status.running.local)
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="text-sm">
+        <div className="min-w-0 text-sm">
           {status.updater.state === 'running' ? (
             <p className="font-semibold text-accent">Updating… this page will reconnect when the new version is up.</p>
-          ) : status.behind === null ? (
+          ) : status.updateAvailable === null ? (
             <p className="text-ink-soft">{status.blocked ?? 'Could not check for updates.'}</p>
-          ) : upToDate ? (
+          ) : status.updateAvailable ? (
+            <p className="font-semibold text-ink">
+              A newer image is published
+              {status.commits.length > 0 && (
+                <>
+                  {' '}
+                  with {status.commits.length} new commit{status.commits.length === 1 ? '' : 's'}
+                </>
+              )}
+            </p>
+          ) : (
             <p className="inline-flex items-center gap-1.5 font-semibold text-starboard">
               <IconCheck className="size-4" />
               Up to date
             </p>
-          ) : (
-            <p className="font-semibold text-ink">
-              {status.behind} newer commit{status.behind === 1 ? '' : 's'} on {status.repo?.owner}/{status.repo?.name} ({status.repo?.branch})
-            </p>
           )}
           <p className="mt-1 text-xs text-ink-soft">
-            Running <span className="font-mono">{short(status.running)}</span> · checkout <span className="font-mono">{short(status.checkout)}</span>
-            {status.latest && (
-              <>
-                {' '}
-                · latest <span className="font-mono">{short(status.latest)}</span>
-              </>
-            )}
+            <span className="font-mono">{status.image ?? '—'}</span>
+            {status.running.local ? ' · built on this machine' : <> · running <span className="font-mono">{short(status.running.digest)}</span></>}
+            {status.running.revision && <> · commit <span className="font-mono">{status.running.revision.slice(0, 7)}</span></>}
+            {status.latest.digest && <> · published <span className="font-mono">{short(status.latest.digest)}</span></>}
             {status.checkedAt && <> · checked {timeAgo(status.checkedAt)}</>}
             {status.updater.state === 'done' && status.updater.startedAt && <> · last update {timeAgo(status.updater.startedAt)}</>}
             {status.updater.state === 'failed' && <span className="text-port"> · the last update failed; see the log below</span>}
           </p>
-          {status.blocked && status.behind !== null && <p className="mt-1 text-xs text-warn">{status.blocked}</p>}
+          {status.blocked && status.updateAvailable !== null && <p className="mt-1 text-xs text-warn">{status.blocked}</p>}
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" className="gap-1.5 text-xs" busy={busy === 'check'} disabled={updating} onClick={check}>
             <IconRotateCw className="size-3.5" />
             Check now
           </Button>
-          {status.behind !== null && status.behind > 0 && canUpdate && (
+          {canApply && (
             <Button size="sm" variant="primary" className="text-xs" busy={updating} onClick={apply}>
               Update now
             </Button>
@@ -125,9 +127,9 @@ export default function SoftwareUpdate() {
       )}
 
       <p className="text-[11px] text-ink-soft">
-        Updates pull the checkout this Dockyard runs from and rebuild only the dockyard service. Apps keep running throughout; the
-        dashboard is unavailable for about a minute. If an update ever goes wrong, run{' '}
-        <span className="font-mono">docker compose up -d --build</span> in the checkout by hand.
+        An update pulls the published image and recreates only the dockyard service from it, then removes the old image. Apps keep running
+        throughout; the dashboard is unavailable for about a minute. The manual equivalent is{' '}
+        <span className="font-mono">docker compose pull dockyard && docker compose up -d dockyard</span>.
       </p>
       {status.updater.state === 'failed' && (
         <Button size="sm" variant="quiet" className="text-xs" onClick={() => reload()}>

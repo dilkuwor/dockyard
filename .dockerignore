@@ -1,7 +1,4 @@
-.git/**
-!.git/HEAD
-!.git/refs/**
-!.git/packed-refs
+.git
 .env
 .data
 **/node_modules
