@@ -143,6 +143,9 @@ interface DnsRecord {
   proxied?: boolean;
 }
 
+/** Only address records compete with the CNAME Dockyard places; TXT, MX and the rest can share the name. */
+const competes = (record: DnsRecord): boolean => record.type === 'A' || record.type === 'AAAA' || record.type === 'CNAME';
+
 /**
  * Does everything in Cloudflare with an API token: tunnel, routing, DNS, and letting deploy
  * hooks past bot protection. The token is kept, encrypted with the rest of the public-access
@@ -271,7 +274,7 @@ export async function setupAutomatic(input: {
       const wildcardRecords = await lookup(wildcard);
       // A record for the dashboard's own name would win over the wildcard, so it has to point here too.
       const dashboardRecords = await lookup(dashboard);
-      const inTheWay = [...wildcardRecords, ...dashboardRecords].filter((record) => !isOurs(record));
+      const inTheWay = [...wildcardRecords, ...dashboardRecords].filter((record) => competes(record) && !isOurs(record));
       // Moving to a new tunnel: records that point at the old tunnel are expected and get replaced.
       const pointsAtATunnel = (record: DnsRecord) => record.type === 'CNAME' && record.content.endsWith('.cfargotunnel.com');
       const blocking = inTheWay.filter((record) => !(input.replaceDns || (movedTunnels && pointsAtATunnel(record))));
@@ -422,7 +425,7 @@ async function pointWildcardDns(apiToken: string, zoneId: string, tunnelId: stri
   const target = `${tunnelId}.cfargotunnel.com`;
   const records = await cf<DnsRecord[]>(apiToken, 'GET', `/zones/${zoneId}/dns_records?name=${encodeURIComponent(wildcard)}`);
   const isOurs = (record: DnsRecord) => record.type === 'CNAME' && record.content === target;
-  const inTheWay = records.filter((record) => !isOurs(record));
+  const inTheWay = records.filter((record) => competes(record) && !isOurs(record));
   if (inTheWay.length && !replaceDns) {
     const list = inTheWay.map((record) => `${record.name} (${record.type} to ${record.content})`).join(', ');
     throw new Error(`These DNS records point somewhere else: ${list}. Tick "Replace existing DNS records" to point them at Dockyard instead.`);
@@ -634,7 +637,7 @@ export async function attachHostname(hostname: string): Promise<SetupResult & { 
     const target = `${access.tunnelId}.cfargotunnel.com`;
     const records = await cf<DnsRecord[]>(token, 'GET', `/zones/${zone.id}/dns_records?name=${encodeURIComponent(hostname)}`);
     const ours = records.find((r) => r.type === 'CNAME' && r.content === target);
-    const others = records.filter((r) => !(r.type === 'CNAME' && r.content === target));
+    const others = records.filter((r) => competes(r) && !(r.type === 'CNAME' && r.content === target));
     if (others.length) {
       const list = others.map((r) => `${r.type} to ${r.content}`).join(', ');
       throw new Error(`${hostname} already has a DNS record pointing elsewhere (${list}). Remove it in Cloudflare, then add the hostname again.`);
