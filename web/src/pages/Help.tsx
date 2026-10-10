@@ -1,15 +1,19 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { api } from '../api'
-import { Card, CopyButton, TextInput } from '../components/ui'
+import { Card, CopyIconButton, TextInput } from '../components/ui'
 import { IconTerminal, IconSearch } from '../components/Icons'
 import { useResource } from '../lib'
 
 function Command({ children }: { children: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-lg scheme-dark bg-console py-2 pr-2 pl-4 border border-slate-800">
-      <pre className="min-w-0 flex-1 overflow-x-auto scheme-dark py-1 font-mono text-xs leading-relaxed text-console-text">{children}</pre>
-      <CopyButton value={children} />
+    <div className="relative rounded-lg scheme-dark bg-console border border-slate-800">
+      <pre className="overflow-x-auto py-3 pr-12 pl-4 font-mono text-xs leading-relaxed text-console-text">{children}</pre>
+      <CopyIconButton
+        value={children}
+        label="Copy command"
+        className="absolute top-1.5 right-1.5 scheme-dark text-console-text/70 hover:bg-white/10 hover:text-console-text"
+      />
     </div>
   )
 }

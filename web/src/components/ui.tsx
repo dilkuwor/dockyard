@@ -1,7 +1,7 @@
 import { useId, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { ApiError, type AppState, type DeploymentStatus } from '../api'
 import { cx } from '../lib'
-import { IconCheck } from './Icons'
+import { IconCheck, IconCopy } from './Icons'
 
 type Variant = 'primary' | 'accent' | 'secondary' | 'quiet' | 'danger' | 'success'
 
@@ -200,6 +200,30 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
         label
       )}
     </Button>
+  )
+}
+
+/** A small icon-only copy control. Shows a check for a moment after copying. */
+export function CopyIconButton({ value, label = 'Copy', className }: { value: string; label?: string; className?: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      aria-label={copied ? 'Copied' : label}
+      title={copied ? 'Copied' : label}
+      onClick={async () => {
+        await navigator.clipboard.writeText(value)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      }}
+      className={cx(
+        'inline-flex size-7 items-center justify-center rounded-md transition-colors',
+        copied ? 'bg-starboard/15 text-starboard' : 'text-ink-soft hover:bg-ink/8 hover:text-ink',
+        className,
+      )}
+    >
+      {copied ? <IconCheck className="size-3.5" /> : <IconCopy className="size-3.5" />}
+    </button>
   )
 }
 

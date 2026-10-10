@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { api, type ApiToken } from '../api'
-import { Button, Card, CopyButton, ErrorNote, TextInput } from '../components/ui'
+import { Button, Card, CopyButton, CopyIconButton, ErrorNote, TextInput } from '../components/ui'
 import { IconTerminal, IconCheck, IconKey, IconPlus } from '../components/Icons'
 import { timeAgo, useResource } from '../lib'
 
@@ -191,7 +191,6 @@ chmod +x ~/.local/bin/dockyard`
               <p className="text-xs text-ink-soft">Run these commands once on the computer where the AI agent runs.</p>
             </div>
           </div>
-          <CopyButton value={setup} label="Copy bootstrap snippet" />
         </div>
 
         <ol className="list-decimal space-y-2 pl-5 text-xs text-ink-soft">
@@ -199,15 +198,22 @@ chmod +x ~/.local/bin/dockyard`
           <li>Execute this setup block to install the <code className="font-mono text-ink">dockyard</code> binary and authentication config:</li>
         </ol>
 
-        <pre className="overflow-x-auto rounded-lg scheme-dark bg-console p-4 font-mono text-xs leading-relaxed text-console-text">
-          {setup}
-        </pre>
+        <div className="relative">
+          <pre className="overflow-x-auto rounded-lg scheme-dark bg-console p-4 pr-12 font-mono text-xs leading-relaxed text-console-text">
+            {setup}
+          </pre>
+          <CopyIconButton
+            value={setup}
+            label="Copy setup commands"
+            className="absolute top-2 right-2 scheme-dark text-console-text/70 hover:bg-white/10 hover:text-console-text"
+          />
+        </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-paper p-3 text-xs text-ink-soft">
           <p>
             Prompt your agent: <span className="font-semibold text-ink font-mono">{prompt}</span>
           </p>
-          <CopyButton value={prompt} label="Copy prompt" />
+          <CopyIconButton value={prompt} label="Copy prompt" />
         </div>
       </Card>
     </div>
