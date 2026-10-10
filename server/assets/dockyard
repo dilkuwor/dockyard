@@ -22,7 +22,7 @@ Run inside the app's git repository (it must have a GitHub remote named origin).
       gets its own address, <address>-<branch>.<domain>, removed when the branch is
       deleted. The workflow is rewritten to build on every branch.
       The workflow signs its call with the repository secret DOCKYARD_HOOK_SECRET.
-      When the server has a GitHub token (dashboard's GitHub & Deploy Hooks page), it adds
+      When the server has a GitHub token (dashboard's Deploy Hooks page), it adds
       that secret to the repository itself if it is missing; --reset-secret makes it
       overwrite an existing one. Without a server token: with the global deploy hook
       on, you add the one global secret to the repository yourself; otherwise each
@@ -61,7 +61,7 @@ require_config() {
   need curl
   need jq
   [ -n "$DOCKYARD_URL" ] || die "DOCKYARD_URL is not set. Put DOCKYARD_URL and DOCKYARD_TOKEN in $CONFIG_FILE or the environment."
-  [ -n "$DOCKYARD_TOKEN" ] || die "DOCKYARD_TOKEN is not set. Create a token on the dashboard's Agents page."
+  [ -n "$DOCKYARD_TOKEN" ] || die "DOCKYARD_TOKEN is not set. Create a token on the dashboard's Access Tokens page."
 }
 
 # api METHOD PATH [JSON_BODY] -> prints the response body, fails with Dockyard's error message
@@ -77,7 +77,7 @@ api() {
   out=${out%$'\n'*}
   if [ "${status:0:1}" != 2 ]; then
     echo "dockyard: $method $path failed ($status): $(printf '%s' "$out" | jq -r '([.error] + (.details // [])) | join("; ")' 2>/dev/null || printf '%s' "$out")" >&2
-    [ "$status" != 401 ] || echo "dockyard: the server did not accept DOCKYARD_TOKEN. Create a new token on the dashboard's Agents page." >&2
+    [ "$status" != 401 ] || echo "dockyard: the server did not accept DOCKYARD_TOKEN. Create a new token on the dashboard's Access Tokens page." >&2
     return 1
   fi
   printf '%s' "$out"
@@ -322,7 +322,7 @@ cmd_deploy() {
       echo "(Left as they were. If the workflow fails with 401 \"Invalid signature\", run: dockyard deploy --reset-secret)"
     fi
   elif [ "$(printf '%s' "$meta" | jq -r '.globalHook // false')" = true ]; then
-    [ "$reset_secret" != true ] || echo "Note: --reset-secret does nothing until the server has a GitHub token (dashboard's GitHub & Deploy Hooks page)."
+    [ "$reset_secret" != true ] || echo "Note: --reset-secret does nothing until the server has a GitHub token (dashboard's Deploy Hooks page)."
     # One secret for every repository: the address goes in the workflow, the secret is added by the user.
     hook_url="$(printf '%s' "$meta" | jq -r .dashboardUrl)/api/hooks"
     if have_gh && ! gh secret list --json name -q '.[].name' 2>/dev/null | grep -qx DOCKYARD_HOOK_SECRET; then
@@ -330,7 +330,7 @@ cmd_deploy() {
     fi
     echo "Using the global deploy hook. The repository must have the secret DOCKYARD_HOOK_SECRET (https://github.com/$repo/settings/secrets/actions)."
   else
-    have_gh || die "this server's global deploy hook is off, so each app has its own secret and the GitHub CLI is needed to store it. Install it and run: gh auth login (or turn on the global deploy hook on the dashboard's GitHub & Deploy Hooks page)."
+    have_gh || die "this server's global deploy hook is off, so each app has its own secret and the GitHub CLI is needed to store it. Install it and run: gh auth login (or turn on the global deploy hook on the dashboard's Deploy Hooks page)."
     hook_url='${{ secrets.DOCKYARD_HOOK_URL }}'
     hook=$(api GET "/api/apps/$app/hook") || exit 1
     printf '%s' "$hook" | jq -j .url | gh secret set DOCKYARD_HOOK_URL

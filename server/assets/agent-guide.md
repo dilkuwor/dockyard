@@ -34,7 +34,7 @@ The `dockyard` command below sets all of this up in one step.
     the secret in the repository for you (only when it is missing; `--reset-secret`
     overwrites it). Nothing else is needed, whatever `globalHook` says. If Dockyard's
     token cannot reach the repository, the command stops with GitHub's reason; the user
-    fixes the token's repository access on the dashboard's GitHub & Deploy Hooks page.
+    fixes the token's repository access on the dashboard's Deploy Hooks page.
   - `github: false` and `globalHook: true`: one secret is shared by all apps and **the
     user adds it to the repository by hand** (GitHub repository → Settings → Secrets and
     variables → Actions). You cannot read that secret. Ask the user to confirm it is

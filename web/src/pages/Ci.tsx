@@ -140,7 +140,7 @@ export default function CiPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">GitHub & Deploy Hooks</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Deploy Hooks</h1>
         <p className="mt-1 text-sm text-ink-soft">
           How GitHub Actions signs its deploy calls to this server, and whether Dockyard may store that secret in your repositories itself.
         </p>

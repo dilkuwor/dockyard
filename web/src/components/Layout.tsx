@@ -126,17 +126,17 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
       ],
     },
     {
-      title: 'Automation & CI',
+      title: 'Automation',
       items: [
         {
           to: '/agents',
-          label: 'Agent Access',
+          label: 'Access Tokens',
           icon: IconAgent,
           active: pathname.startsWith('/agents'),
         },
         {
           to: '/ci',
-          label: 'GitHub & Deploy Hooks',
+          label: 'Deploy Hooks',
           icon: IconWebhook,
           active: pathname.startsWith('/ci'),
         },
@@ -172,8 +172,8 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
     { to: '/', label: 'Dashboard Overview', icon: IconDashboard },
     { to: '/apps/new', label: 'Create New Application', icon: IconPlus },
     { to: '/images', label: 'Unused Images & Prune', icon: IconImages },
-    { to: '/agents', label: 'Agent Tokens & Setup', icon: IconAgent },
-    { to: '/ci', label: 'GitHub & Deploy Hooks', icon: IconWebhook },
+    { to: '/agents', label: 'Access Tokens & Setup', icon: IconAgent },
+    { to: '/ci', label: 'Deploy Hooks', icon: IconWebhook },
     { to: '/settings', label: 'Settings: Password, Public Access & Registries', icon: IconSettings },
     { to: '/help', label: 'CLI Installation & Guide', icon: IconTerminal },
   ].filter((l) => l.label.toLowerCase().includes(query.toLowerCase()))

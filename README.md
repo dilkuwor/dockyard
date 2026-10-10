@@ -172,7 +172,7 @@ This needs public access, because GitHub has to reach Dockyard.
    Dockyard deploys that exact image digest.
 
 To use one signing secret for all apps instead of one per app, turn on the
-**Global deploy hook** on the **GitHub & Deploy Hooks** page and add it to each
+**Global deploy hook** on the **Deploy Hooks** page and add it to each
 repository as the Actions secret `DOCKYARD_HOOK_SECRET`. Dockyard picks the app
 from the image name, so the secret can move an app to another build of its own
 image but not to a foreign one.
@@ -182,7 +182,7 @@ image but not to a foreign one.
 The `dockyard` command sets up the GitHub flow for a project in one step, and an
 agent such as Claude Code can run it for you.
 
-1. On the **Agent Access** page, create an access token. It is used instead of
+1. On the **Access Tokens** page, create an access token. It is used instead of
    the admin password and can be rolled or revoked at any time.
 2. Install the command on the machine where you or the agent work. The **CLI &
    Docs** page has the commands, with this server's address filled in. It needs
@@ -198,7 +198,7 @@ pushes it to ghcr.io, pushes the branch, and waits until the app is live.
 The workflow signs its call with the repository secret `DOCKYARD_HOOK_SECRET`, and
 there are three ways for it to get there:
 
-- Add a GitHub token on the **GitHub & Deploy Hooks** page under **GitHub Automation**,
+- Add a GitHub token on the **Deploy Hooks** page under **GitHub Automation**,
   and Dockyard stores the secret in the repository itself during `dockyard deploy`.
   Use a fine-grained token with the *Secrets: Read and write* permission on the
   repositories you deploy from. An existing secret is left alone;

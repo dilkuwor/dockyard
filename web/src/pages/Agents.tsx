@@ -71,11 +71,11 @@ chmod +x ~/.local/bin/dockyard`
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Agent Access</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Access Tokens</h1>
         <p className="mt-1 text-sm text-ink-soft">
           API tokens and setup commands for autonomous AI coding agents (Claude Code, Gemini, Copilot) and scripts. How GitHub
           reaches this server is configured under{' '}
-          <Link to="/ci" className="text-accent hover:underline">GitHub & Deploy Hooks</Link>.
+          <Link to="/ci" className="text-accent hover:underline">Deploy Hooks</Link>.
         </p>
       </div>
 

@@ -8,7 +8,7 @@ import { getSetting, setSetting } from './db.js';
 import { HttpError, badRequest } from './errors.js';
 
 /**
- * An optional GitHub token the admin adds on the dashboard's GitHub & Deploy Hooks page. With it, Dockyard can
+ * An optional GitHub token the admin adds on the dashboard's Deploy Hooks page. With it, Dockyard can
  * store an app's deploy hook secret in the app's GitHub repository, so `dockyard deploy`
  * works without the GitHub CLI and without the user pasting the secret by hand.
  *
@@ -111,7 +111,7 @@ export async function ensureRepoSecrets(
   overwrite: boolean,
 ): Promise<Record<string, SecretOutcome>> {
   const s = stored();
-  if (!s) throw new HttpError(409, "Dockyard has no GitHub token. Add one on the dashboard's GitHub & Deploy Hooks page.");
+  if (!s) throw new HttpError(409, "Dockyard has no GitHub token. Add one on the dashboard's Deploy Hooks page.");
   const token = decrypt(s.token_enc);
 
   let res: Response;
@@ -126,7 +126,7 @@ export async function ensureRepoSecrets(
       `GitHub repository ${repo} was not found with Dockyard's token (@${s.login}). Check the name, or give that token access to the repository with the "Secrets: Read and write" permission.`,
     );
   }
-  if (res.status === 401) throw new HttpError(409, `Dockyard's GitHub token (@${s.login}) no longer works. Replace it on the dashboard's GitHub & Deploy Hooks page.`);
+  if (res.status === 401) throw new HttpError(409, `Dockyard's GitHub token (@${s.login}) no longer works. Replace it on the dashboard's Deploy Hooks page.`);
   if (res.status === 403) {
     throw new HttpError(403, await ghError(res, `Dockyard's GitHub token (@${s.login}) may not manage Actions secrets in ${repo}. It needs the "Secrets: Read and write" repository permission (classic tokens: the repo scope).`));
   }
