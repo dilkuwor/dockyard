@@ -78,51 +78,9 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-ink">Platform Settings</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          The dashboard password, public access for your apps, and credentials for private container registries.
+          Public access and domains, registry credentials, backups, updates, and the dashboard password.
         </p>
       </div>
-
-      {/* Dashboard password */}
-      <Card className="p-6 space-y-5">
-        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
-          <div className="rounded-md bg-accent/10 p-2 text-accent">
-            <IconKey className="size-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-ink">Admin password</h2>
-            <p className="text-xs text-ink-soft">Signs you into this dashboard. Dockyard can run anything on this machine, so treat it like root.</p>
-          </div>
-        </div>
-        <ChangePassword />
-      </Card>
-
-      {/* Backups */}
-      <Card className="p-6 space-y-5">
-        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
-          <div className="rounded-md bg-accent/10 p-2 text-accent">
-            <IconDatabase className="size-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-ink">Backups</h2>
-            <p className="text-xs text-ink-soft">Daily archives of Dockyard's settings and every app's data, kept on this machine.</p>
-          </div>
-        </div>
-        <Backups />
-      </Card>
-
-      {/* Software update */}
-      <Card className="p-6 space-y-5">
-        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
-          <div className="rounded-md bg-accent/10 p-2 text-accent">
-            <IconRotateCw className="size-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-ink">Software update</h2>
-            <p className="text-xs text-ink-soft">Update Dockyard itself from its GitHub repository, in place.</p>
-          </div>
-        </div>
-        <SoftwareUpdate />
-      </Card>
 
       {/* Public access through Cloudflare */}
       <Card className="p-6 space-y-5">
@@ -300,6 +258,48 @@ export default function SettingsPage() {
           </div>
         </form>
       </Card>
+      {/* Backups */}
+      <Card className="p-6 space-y-5">
+        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
+          <div className="rounded-md bg-accent/10 p-2 text-accent">
+            <IconDatabase className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-ink">Backups</h2>
+            <p className="text-xs text-ink-soft">Daily archives of Dockyard's settings and every app's data, kept on this machine.</p>
+          </div>
+        </div>
+        <Backups />
+      </Card>
+
+      {/* Software update */}
+      <Card className="p-6 space-y-5">
+        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
+          <div className="rounded-md bg-accent/10 p-2 text-accent">
+            <IconRotateCw className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-ink">Software update</h2>
+            <p className="text-xs text-ink-soft">Update Dockyard itself from its GitHub repository, in place.</p>
+          </div>
+        </div>
+        <SoftwareUpdate />
+      </Card>
+
+      {/* Dashboard password */}
+      <Card className="p-6 space-y-5">
+        <div className="flex items-center gap-2.5 border-b border-rule pb-4">
+          <div className="rounded-md bg-accent/10 p-2 text-accent">
+            <IconKey className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-ink">Admin password</h2>
+            <p className="text-xs text-ink-soft">Signs you into this dashboard. Dockyard can run anything on this machine, so treat it like root.</p>
+          </div>
+        </div>
+        <ChangePassword />
+      </Card>
+
     </div>
   )
 }
