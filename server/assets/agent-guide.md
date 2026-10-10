@@ -72,6 +72,9 @@ The `dockyard` command below sets all of this up in one step.
    - `--port` is the port from step 1. It is required the first time.
    - `--address` is optional: the app is served at `my-app.{{BASE_DOMAIN}}`.
      Use lowercase letters, digits and hyphens. Without it, Dockyard picks a random one.
+   - `--domain` is optional: which of the server's public domains the app lives under.
+     `GET /api/meta` lists them in `domains` and the one used without the flag in
+     `defaultDomain`. Only pass it when the user asks for a specific domain.
    - The command registers the app, commits `.github/workflows/dockyard.yml`, pushes
      the current branch, and waits until the app is live. It prints the address when done.
      When Dockyard has a GitHub token, or the global hook is off, it also stores the
@@ -126,11 +129,11 @@ Every request needs `Authorization: Bearer $DOCKYARD_TOKEN`. Bodies and response
 
 | Call | Purpose |
 | --- | --- |
-| `GET /api/meta` | Address domain, whether public access and the global hook are on, whether Dockyard has a GitHub token (`github`), and which registries it has credentials for |
+| `GET /api/meta` | Address domain, the public `domains` and `defaultDomain`, whether public access and the global hook are on, whether Dockyard has a GitHub token (`github`), and which registries it has credentials for |
 | `GET /api/apps` | List apps with state and address |
-| `POST /api/apps` | Create: `{name, slug?, sourceType: "image", image, port, deploy?}` or `{name, slug?, sourceType: "compose", compose, primaryService?, port}` |
+| `POST /api/apps` | Create: `{name, slug?, domain?, sourceType: "image", image, port, deploy?}` or `{name, slug?, domain?, sourceType: "compose", compose, primaryService?, port}` |
 | `GET /api/apps/:id` | One app, with its containers |
-| `PATCH /api/apps/:id` | Change `name`, `slug`, `port`, `compose`, `primaryService` (applies on the next deploy) |
+| `PATCH /api/apps/:id` | Change `name`, `slug`, `domain`, `port`, `compose`, `primaryService` (applies on the next deploy) |
 | `DELETE /api/apps/:id?volumes=true` | Remove the app; ask the user first |
 | `POST /api/apps/:id/deploy` | Deploy the current settings again |
 | `GET /api/apps/:id/deployments` | Deployment history, newest first |

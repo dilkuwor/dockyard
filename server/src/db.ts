@@ -72,6 +72,10 @@ CREATE TABLE IF NOT EXISTS images (
 );
 `);
 
+// Added later: the public domain an app lives under. NULL means the domain chosen at onboarding.
+const appColumns = (db.prepare('PRAGMA table_info(apps)').all() as { name: string }[]).map((c) => c.name);
+if (!appColumns.includes('domain')) db.exec('ALTER TABLE apps ADD COLUMN domain TEXT');
+
 export interface AppRow {
   id: string;
   name: string;
@@ -83,6 +87,7 @@ export interface AppRow {
   env_enc: string | null;
   hook_secret_enc: string;
   current_deployment_id: string | null;
+  domain: string | null;
   created_at: number;
   updated_at: number;
 }

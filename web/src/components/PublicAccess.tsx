@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { api, type PublicAccessStatus, type SetupResult, type SetupStep } from '../api'
 import { cx, useResource } from '../lib'
 import { Button, ErrorNote, Field, Select, TextInput } from './ui'
+import Domains from './Domains'
 
 const PERMISSIONS = [
   'Account · Cloudflare Tunnel · Edit',
@@ -37,7 +38,7 @@ export function SetupSteps({ steps }: { steps: SetupStep[] }) {
 }
 
 /** The setup form, used on the first-run screen and in Settings. */
-export function PublicAccessSetup({ onChange }: { onChange: (result: SetupResult) => void }) {
+export function PublicAccessSetup({ onChange, hasApiToken = false }: { onChange: (result: SetupResult) => void; hasApiToken?: boolean }) {
   const [mode, setMode] = useState<'automatic' | 'manual'>('automatic')
   const [apiToken, setApiToken] = useState('')
   const [zones, setZones] = useState<{ id: string; name: string }[] | null>(null)
@@ -126,7 +127,8 @@ export function PublicAccessSetup({ onChange }: { onChange: (result: SetupResult
           <div className="space-y-2 text-sm text-ink-soft">
             <p>
               Paste a Cloudflare API token and Dockyard creates the tunnel, routes your domain to it, adds the DNS record and
-              lets deploy hooks past bot protection. The token is used once and is not stored.
+              lets deploy hooks past bot protection. The token is kept, encrypted, so more domains can be added later without
+              pasting it again.
             </p>
             <p>
               Create it at{' '}
@@ -144,7 +146,7 @@ export function PublicAccessSetup({ onChange }: { onChange: (result: SetupResult
 
           <form onSubmit={checkToken} className="flex flex-wrap items-end gap-2">
             <div className="min-w-64 flex-1">
-              <Field label="Cloudflare API token">
+              <Field label="Cloudflare API token" hint={hasApiToken ? 'Leave blank to use the saved token.' : undefined}>
                 <TextInput
                   type="password"
                   autoComplete="off"
@@ -153,7 +155,8 @@ export function PublicAccessSetup({ onChange }: { onChange: (result: SetupResult
                     setApiToken(e.target.value)
                     setZones(null)
                   }}
-                  required
+                  placeholder={hasApiToken ? 'Saved token' : undefined}
+                  required={!hasApiToken}
                 />
               </Field>
             </div>
@@ -294,7 +297,7 @@ export default function PublicAccess() {
           </p>
           <p className="mt-1 text-xs text-ink-soft">
             {status.enabled
-              ? `Connector ${status.connector === 'running' ? 'running' : 'not running'} · ${status.mode === 'automatic' ? 'set up by Dockyard' : 'using your own tunnel'} · local address still works: ${status.localDashboardUrl}`
+              ? `Connector ${status.connector === 'running' ? 'running' : 'not running'} · ${status.mode === 'automatic' ? 'set up by Dockyard' : 'using your own tunnel'}${status.hasApiToken ? ' · API token saved' : ''} · local address still works: ${status.localDashboardUrl}`
               : status.configured
                 ? `Settings for ${status.domain} are saved, so you can switch it back on without Cloudflare.`
                 : 'Connect a Cloudflare domain to give every app a public HTTPS address. GitHub deploy hooks also need this.'}
@@ -321,6 +324,11 @@ export default function PublicAccess() {
           ) : status.enabled ? (
             <>
               <Button size="sm" onClick={() => setShowSetup(!showSetup)}>{showSetup ? 'Hide setup' : 'Set up again'}</Button>
+              {status.hasApiToken && (
+                <Button size="sm" variant="quiet" busy={busy} title="Drop the saved Cloudflare API token" onClick={() => act(api.cloudflareForgetToken)}>
+                  Forget token
+                </Button>
+              )}
               <Button size="sm" onClick={() => setConfirming('off')}>Turn off</Button>
             </>
           ) : status.configured ? (
@@ -336,9 +344,24 @@ export default function PublicAccess() {
       <ErrorNote error={actionError} />
       <SetupSteps steps={steps} />
 
+      {status.configured && (
+        <Domains
+          status={status}
+          onResult={(result) => {
+            if ('steps' in result) {
+              setSteps(result.steps)
+              setData(result.status)
+            } else {
+              setData(result)
+            }
+          }}
+        />
+      )}
+
       {(showSetup || !status.configured) && (
         <div className={cx(status.configured && 'border-t border-rule pt-5')}>
           <PublicAccessSetup
+            hasApiToken={status.hasApiToken}
             onChange={(result) => {
               setData(result.status)
               if (result.ok) {

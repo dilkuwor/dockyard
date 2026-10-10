@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { api, type AppDetail } from '../../api'
-import { Button, Card, ErrorNote, Field, Section, TextArea, TextInput } from '../../components/ui'
+import { useResource } from '../../lib'
+import { Button, Card, ErrorNote, Field, Section, Select, TextArea, TextInput } from '../../components/ui'
 
 export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: () => void }) {
   const navigate = useNavigate()
   const [name, setName] = useState(app.name)
   const [slug, setSlug] = useState(app.slug)
+  const [domain, setDomain] = useState(app.domain ?? '')
+  const { data: meta } = useResource(api.meta, [])
+  const domains = meta?.domains ?? []
   const [port, setPort] = useState(String(app.port))
   const [primaryService, setPrimaryService] = useState(app.primaryService)
   const [compose, setCompose] = useState(app.compose)
@@ -23,7 +27,7 @@ export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: ()
     setError(null)
     setSaved('')
     try {
-      await api.updateApp(app.id, { name, slug, port: Number(port), primaryService, compose })
+      await api.updateApp(app.id, { name, slug, domain, port: Number(port), primaryService, compose })
       if (deploy) {
         await api.deploy(app.id)
         navigate(`/apps/${app.id}/deployments`)
@@ -60,12 +64,20 @@ export default function Settings({ app, onSaved }: { app: AppDetail; onSaved: ()
             <TextInput type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} />
           </Field>
         </div>
-        <Field label="Address" hint="Where the app is reachable. A new address takes effect on the next deploy, and the old one stops working then.">
+        <Field label="Address" hint="Where the app is reachable. A new name takes effect on the next deploy, and the old one stops working then. A different domain applies at once.">
           <span className="flex max-w-md">
             <TextInput value={slug} onChange={(e) => setSlug(e.target.value)} className="rounded-r-none font-mono text-[13px]" />
-            <span className="inline-flex items-center rounded-r-md border border-l-0 border-rule bg-paper px-3 font-mono text-[13px] whitespace-nowrap text-ink-soft">
-              {app.url.replace(/^https?:\/\//, '').slice(app.slug.length)}
-            </span>
+            {domains.length > 1 ? (
+              <Select value={domain} onChange={(e) => setDomain(e.target.value)} className="w-auto rounded-l-none border-l-0 bg-paper font-mono text-[13px]" aria-label="Domain">
+                {domains.map((d) => (
+                  <option key={d} value={d}>.{d}</option>
+                ))}
+              </Select>
+            ) : (
+              <span className="inline-flex items-center rounded-r-md border border-l-0 border-rule bg-paper px-3 font-mono text-[13px] whitespace-nowrap text-ink-soft">
+                {app.url.replace(/^https?:\/\//, '').slice(app.slug.length)}
+              </span>
+            )}
           </span>
         </Field>
         <Field label="Compose file" hint="Webhook deploys update the routed service's image here automatically.">

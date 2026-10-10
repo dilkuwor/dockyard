@@ -17,6 +17,7 @@ export interface AppSummary {
   id: string
   name: string
   slug: string
+  domain: string | null
   url: string
   sourceType: 'image' | 'compose'
   primaryService: string
@@ -95,6 +96,8 @@ export interface PublicAccessStatus {
   mode: 'automatic' | 'manual' | null
   domain: string | null
   connector: 'running' | 'stopped' | 'missing'
+  hasApiToken: boolean
+  domains: { domain: string; primary: boolean; default: boolean; apps: number }[]
   dashboardUrl: string
   localDashboardUrl: string
   exampleAppUrl: string
@@ -153,20 +156,22 @@ export const api = {
   changePassword: (current: string, next: string) =>
     request<{ ok: true; updatedAt: number | null }>('POST', '/api/auth/password', { current, next }),
   logout: () => request<{ ok: true }>('POST', '/api/auth/logout'),
-  meta: () => request<{ baseDomain: string; dashboardUrl: string; publicAccess: boolean; globalHook: boolean; github: boolean }>('GET', '/api/meta'),
+  meta: () =>
+    request<{ baseDomain: string; dashboardUrl: string; publicAccess: boolean; globalHook: boolean; github: boolean; domains: string[]; defaultDomain: string | null }>('GET', '/api/meta'),
 
   listApps: () => request<AppSummary[]>('GET', '/api/apps'),
   getApp: (id: string) => request<AppDetail>('GET', `/api/apps/${id}`),
   createApp: (body: {
     name: string
     slug?: string
+    domain?: string
     sourceType: 'image' | 'compose'
     image?: string
     compose?: string
     primaryService?: string
     port: number
   }) => request<AppSummary>('POST', '/api/apps', body),
-  updateApp: (id: string, body: Partial<{ name: string; slug: string; port: number; compose: string; primaryService: string }>) =>
+  updateApp: (id: string, body: Partial<{ name: string; slug: string; domain: string; port: number; compose: string; primaryService: string }>) =>
     request<AppSummary>('PATCH', `/api/apps/${id}`, body),
   deleteApp: (id: string, removeVolumes: boolean) =>
     request<{ ok: true }>('DELETE', `/api/apps/${id}?volumes=${removeVolumes}`),
@@ -202,6 +207,13 @@ export const api = {
   cloudflareSetup: (body: { apiToken: string; zoneId: string; replaceDns: boolean; disableBotFightMode: boolean; newTunnel?: boolean }) =>
     request<SetupResult>('POST', '/api/cloudflare/setup', body),
   cloudflareManual: (body: { domain: string; tunnelToken: string }) => request<SetupResult>('POST', '/api/cloudflare/manual', body),
+  cloudflareAddDomain: (body: { apiToken?: string; zoneId?: string; domain?: string; replaceDns: boolean }) =>
+    request<SetupResult>('POST', '/api/cloudflare/domains', body),
+  cloudflareRemoveDomain: (domain: string, apiToken?: string) =>
+    request<SetupResult>('DELETE', `/api/cloudflare/domains/${encodeURIComponent(domain)}`, { apiToken }),
+  cloudflareSetDefaultDomain: (domain: string) =>
+    request<PublicAccessStatus>('POST', `/api/cloudflare/domains/${encodeURIComponent(domain)}/default`),
+  cloudflareForgetToken: () => request<PublicAccessStatus>('DELETE', '/api/cloudflare/token'),
   cloudflareDisable: () => request<PublicAccessStatus>('POST', '/api/cloudflare/disable'),
   cloudflareEnable: () => request<SetupResult>('POST', '/api/cloudflare/enable'),
   cloudflareForget: () => request<PublicAccessStatus>('DELETE', '/api/cloudflare'),

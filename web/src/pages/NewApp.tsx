@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { api } from '../api'
-import { Button, Card, ErrorNote, Field, TextArea, TextInput } from '../components/ui'
+import { Button, Card, ErrorNote, Field, TextArea, TextInput, Select } from '../components/ui'
 import { IconRocket, IconServer } from '../components/Icons'
 import { cx, useResource } from '../lib'
 
@@ -25,6 +25,7 @@ export default function NewAppPage() {
   const { data: meta } = useResource(api.meta, [])
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
+  const [domain, setDomain] = useState('')
   const [image, setImage] = useState('')
   const [compose, setCompose] = useState(exampleCompose)
   const [primaryService, setPrimaryService] = useState('')
@@ -40,6 +41,7 @@ export default function NewAppPage() {
       const app = await api.createApp({
         name,
         slug: slug.trim() || undefined,
+        domain: domain || undefined,
         sourceType,
         image: sourceType === 'image' ? image : undefined,
         compose: sourceType === 'compose' ? compose : undefined,
@@ -53,9 +55,9 @@ export default function NewAppPage() {
     }
   }
 
-  const liveDomain = slug.trim()
-    ? `${slug.trim()}.${meta?.baseDomain ?? 'bytetech.cloud'}`
-    : `[generated-subdomain].${meta?.baseDomain ?? 'bytetech.cloud'}`
+  const domains = meta?.domains ?? []
+  const chosenDomain = domain || meta?.defaultDomain || meta?.baseDomain || 'domain'
+  const liveDomain = `${slug.trim() || '[generated-subdomain]'}.${chosenDomain}`
 
   return (
     <div className="space-y-5">
@@ -88,9 +90,17 @@ export default function NewAppPage() {
                   placeholder="my-app"
                   className="rounded-r-none font-mono text-xs"
                 />
-                <span className="inline-flex items-center rounded-r-md border border-l-0 border-rule bg-paper px-2.5 font-mono text-xs text-ink-soft whitespace-nowrap">
-                  .{meta?.baseDomain ?? 'domain'}
-                </span>
+                {domains.length > 1 ? (
+                  <Select value={domain} onChange={(e) => setDomain(e.target.value)} className="w-auto rounded-l-none border-l-0 bg-paper font-mono text-xs" aria-label="Domain">
+                    {domains.map((d) => (
+                      <option key={d} value={d === meta?.defaultDomain ? '' : d}>.{d}</option>
+                    ))}
+                  </Select>
+                ) : (
+                  <span className="inline-flex items-center rounded-r-md border border-l-0 border-rule bg-paper px-2.5 font-mono text-xs text-ink-soft whitespace-nowrap">
+                    .{chosenDomain}
+                  </span>
+                )}
               </div>
             </Field>
           </div>

@@ -2,7 +2,7 @@ import { config } from './config.js';
 import { randomId, sha256Hex } from './crypto.js';
 import { connectorId, connectorState, startConnector, stopConnector, waitForConnector } from './docker.js';
 import { badRequest } from './errors.js';
-import { completeOnboarding, publicAccess, savePublicAccess, type PublicAccess } from './site.js';
+import { completeOnboarding, configuredDomains, publicAccess, savePublicAccess, type PublicAccess } from './site.js';
 
 export interface Step {
   name: string;
@@ -145,7 +145,8 @@ interface DnsRecord {
 
 /**
  * Does everything in Cloudflare with an API token: tunnel, routing, DNS, and letting deploy
- * hooks past bot protection. The API token is used for this call only and never stored.
+ * hooks past bot protection. The token is kept, encrypted with the rest of the public-access
+ * settings, so domains can be added or removed later without pasting it again.
  */
 interface Tunnel {
   id: string;
@@ -167,7 +168,9 @@ export async function setupAutomatic(input: {
   /** Create a fresh tunnel even if one for this domain, or this install's previous one, exists. */
   newTunnel: boolean;
 }): Promise<SetupResult> {
-  const { apiToken, zoneId } = input;
+  const { zoneId } = input;
+  // A blank token means "the saved one", for "Set up again" after the first setup.
+  const apiToken = input.apiToken || publicAccess()?.apiToken || '';
   if (!apiToken) throw badRequest('Enter a Cloudflare API token.');
   if (!ZONE_ID.test(zoneId)) throw badRequest('Choose one of your domains.');
 
@@ -335,7 +338,7 @@ export async function setupAutomatic(input: {
     });
 
     const ok = await activate(
-      { enabled: true, mode: 'automatic', domain, tunnelToken, accountId: account, zoneId, tunnelId: tunnel.id, updatedAt: Date.now() },
+      { enabled: true, mode: 'automatic', domain, tunnelToken, accountId: account, zoneId, tunnelId: tunnel.id, apiToken, updatedAt: Date.now() },
       steps,
     );
     return { ok, steps };
@@ -369,6 +372,28 @@ export async function enablePublicAccess(): Promise<SetupResult> {
   const access = publicAccess();
   if (!access) throw badRequest('Public access has not been set up yet.');
   const steps: Step[] = [];
+
+  // With a saved token, make sure the tunnel is still ours alone before attaching to it again.
+  if (access.mode === 'automatic' && access.apiToken && access.accountId && access.tunnelId) {
+    try {
+      const tunnel = await cf<Tunnel>(access.apiToken, 'GET', `/accounts/${access.accountId}/cfd_tunnel/${access.tunnelId}`);
+      const others = foreignConnectors(tunnel, await connectorId());
+      if (others > 0) {
+        steps.push({
+          name: 'Check the tunnel',
+          status: 'failed',
+          detail:
+            `The tunnel "${tunnel.name}" has ${others} other connector${others === 1 ? '' : 's'} attached, so another Dockyard or cloudflared is using it. ` +
+            'Joining it would send some of this domain\'s requests to that machine. Use "Set up again" with "Use a separate tunnel" instead.',
+        });
+        return { ok: false, steps };
+      }
+      steps.push({ name: 'Check the tunnel', status: 'ok', detail: `No other connectors on "${tunnel.name}".` });
+    } catch (err) {
+      steps.push({ name: 'Check the tunnel', status: 'warning', detail: `Could not check for other connectors: ${(err as Error).message}` });
+    }
+  }
+
   const ok = await activate({ ...access, enabled: true, updatedAt: Date.now() }, steps);
   return { ok, steps };
 }
@@ -376,4 +401,171 @@ export async function enablePublicAccess(): Promise<SetupResult> {
 export async function forgetPublicAccess(): Promise<void> {
   savePublicAccess(null);
   await stopConnector();
+}
+
+type Ingress = { hostname?: string; service: string; originRequest?: unknown };
+const ingressPath = (account: string, tunnelId: string) => `/accounts/${account}/cfd_tunnel/${tunnelId}/configurations`;
+
+/** Adds or removes the tunnel route `*.domain` → Traefik, keeping every other route. */
+async function setWildcardRoute(apiToken: string, account: string, tunnelId: string, domain: string, present: boolean): Promise<void> {
+  const wildcard = `*.${domain}`;
+  const path = ingressPath(account, tunnelId);
+  const current = await cf<{ config?: { ingress?: Ingress[] } | null }>(apiToken, 'GET', path).catch(() => null);
+  const others = (current?.config?.ingress ?? []).filter((rule) => rule.hostname && rule.hostname !== wildcard);
+  const ours = present ? [{ hostname: wildcard, service: 'http://traefik:80', originRequest: {} }] : [];
+  await cf(apiToken, 'PUT', path, { config: { ...(current?.config ?? {}), ingress: [...others, ...ours, { service: 'http_status:404' }] } });
+}
+
+/** Makes `*.domain` a proxied CNAME to the tunnel, replacing a record that points elsewhere only when allowed. */
+async function pointWildcardDns(apiToken: string, zoneId: string, tunnelId: string, domain: string, replaceDns: boolean): Promise<void> {
+  const wildcard = `*.${domain}`;
+  const target = `${tunnelId}.cfargotunnel.com`;
+  const records = await cf<DnsRecord[]>(apiToken, 'GET', `/zones/${zoneId}/dns_records?name=${encodeURIComponent(wildcard)}`);
+  const isOurs = (record: DnsRecord) => record.type === 'CNAME' && record.content === target;
+  const inTheWay = records.filter((record) => !isOurs(record));
+  if (inTheWay.length && !replaceDns) {
+    const list = inTheWay.map((record) => `${record.name} (${record.type} to ${record.content})`).join(', ');
+    throw new Error(`These DNS records point somewhere else: ${list}. Tick "Replace existing DNS records" to point them at Dockyard instead.`);
+  }
+  for (const record of inTheWay) await cf(apiToken, 'DELETE', `/zones/${zoneId}/dns_records/${record.id}`);
+  const ours = records.find(isOurs);
+  if (!ours) {
+    await cf(apiToken, 'POST', `/zones/${zoneId}/dns_records`, { type: 'CNAME', name: wildcard, content: target, proxied: true, comment: 'Dockyard public access' });
+  } else if (!ours.proxied) {
+    await cf(apiToken, 'PATCH', `/zones/${zoneId}/dns_records/${ours.id}`, { proxied: true });
+  }
+}
+
+export const normalizeDomain = (value: unknown): string => String(value ?? '').trim().toLowerCase().replace(/^\*\./, '');
+
+/**
+ * Adds another domain apps can live under. It rides this install's existing tunnel: one more
+ * route on it and a wildcard record in the new domain's zone, using the token saved at setup unless
+ * another is given. In manual mode the domain is only recorded, and the report says what to set up.
+ */
+export async function addDomain(input: { apiToken?: string; zoneId?: string; domain?: string; replaceDns: boolean }): Promise<SetupResult> {
+  const access = publicAccess();
+  if (!access) throw badRequest('Set up public access first, then add more domains.');
+  const steps: Step[] = [];
+  const fail = (name: string, err: unknown): SetupResult => {
+    steps.push({ name, status: 'failed', detail: (err as Error).message });
+    return { ok: false, steps };
+  };
+
+  if (access.mode === 'manual') {
+    const domain = normalizeDomain(input.domain);
+    if (!DOMAIN.test(domain)) throw badRequest('Enter the domain, such as example.com.');
+    if (configuredDomains().includes(domain)) throw badRequest(`${domain} is already one of this Dockyard's domains.`);
+    savePublicAccess({ ...access, extraDomains: [...(access.extraDomains ?? []), { domain }], updatedAt: Date.now() });
+    steps.push({ name: 'Save', status: 'ok', detail: `Apps can now be given addresses under ${domain}.` });
+    steps.push({
+      name: 'Set up Cloudflare yourself',
+      status: 'warning',
+      detail: `In Cloudflare, add a published application route for *.${domain} → HTTP → traefik:80 to your tunnel, and a proxied CNAME record *.${domain} pointing at the tunnel. Dockyard cannot do this without an API token.`,
+    });
+    return { ok: true, steps };
+  }
+
+  const apiToken = (input.apiToken ?? '').trim() || access.apiToken || '';
+  const zoneId = (input.zoneId ?? '').trim();
+  if (!apiToken) throw badRequest('Enter a Cloudflare API token. Run "Set up again" once to have Dockyard keep it.');
+  if (!ZONE_ID.test(zoneId)) throw badRequest('Choose one of your domains.');
+  if (!access.accountId || !access.tunnelId) {
+    throw badRequest('This public access setup predates multiple domains. Run "Set up again" once, then add domains.');
+  }
+
+  let zone: { name: string; account: { id: string } };
+  try {
+    zone = await cf<{ name: string; account: { id: string } }>(apiToken, 'GET', `/zones/${zoneId}`);
+  } catch (err) {
+    return fail('Find the domain', err);
+  }
+  const domain = zone.name;
+  if (configuredDomains().includes(domain)) throw badRequest(`${domain} is already one of this Dockyard's domains.`);
+  if (zone.account.id !== access.accountId) {
+    return fail('Find the domain', new Error(`${domain} is in a different Cloudflare account than this Dockyard's tunnel. A tunnel can only carry domains from its own account.`));
+  }
+  steps.push({ name: 'Find the domain', status: 'ok', detail: domain });
+
+  try {
+    await setWildcardRoute(apiToken, access.accountId, access.tunnelId, domain, true);
+    steps.push({ name: 'Route the domain to Dockyard', status: 'ok', detail: `*.${domain} goes to Dockyard's proxy through the existing tunnel.` });
+  } catch (err) {
+    return fail('Route the domain to Dockyard', err);
+  }
+  try {
+    await pointWildcardDns(apiToken, zoneId, access.tunnelId, domain, input.replaceDns);
+    steps.push({ name: 'Point DNS at the tunnel', status: 'ok', detail: `*.${domain} is proxied through Cloudflare to the tunnel.` });
+  } catch (err) {
+    return fail('Point DNS at the tunnel', err);
+  }
+
+  savePublicAccess({ ...access, extraDomains: [...(access.extraDomains ?? []), { domain, zoneId }], updatedAt: Date.now() });
+  steps.push({ name: 'Save', status: 'ok', detail: `Apps can now be given addresses under ${domain}.` });
+  return { ok: true, steps };
+}
+
+/** Removes an extra domain. With an API token in automatic mode, its route and DNS record go too. */
+export async function removeDomain(domain: string, apiToken: string | undefined, appsUsingIt: number): Promise<SetupResult> {
+  const access = publicAccess();
+  if (!access) throw badRequest('Public access has not been set up.');
+  if (domain === access.domain) throw badRequest('The dashboard\'s own domain cannot be removed. Use "Set up again" to change it.');
+  const extra = access.extraDomains?.find((d) => d.domain === domain);
+  if (!extra) throw badRequest('That domain is not configured.');
+  if (appsUsingIt > 0) throw badRequest(`${appsUsingIt} app${appsUsingIt === 1 ? ' uses' : 's use'} ${domain}. Move them to another domain first.`);
+  const steps: Step[] = [];
+  const token = apiToken?.trim() || access.apiToken;
+
+  if (access.mode === 'automatic' && token && access.accountId && access.tunnelId) {
+    try {
+      await setWildcardRoute(token, access.accountId, access.tunnelId, domain, false);
+      steps.push({ name: 'Remove the tunnel route', status: 'ok', detail: `*.${domain} no longer goes to Dockyard.` });
+    } catch (err) {
+      steps.push({ name: 'Remove the tunnel route', status: 'warning', detail: `Left in place: ${(err as Error).message}` });
+    }
+    if (extra.zoneId) {
+      try {
+        const target = `${access.tunnelId}.cfargotunnel.com`;
+        const records = await cf<DnsRecord[]>(token, 'GET', `/zones/${extra.zoneId}/dns_records?name=${encodeURIComponent(`*.${domain}`)}`);
+        const ours = records.find((record) => record.type === 'CNAME' && record.content === target);
+        if (ours) await cf(token, 'DELETE', `/zones/${extra.zoneId}/dns_records/${ours.id}`);
+        steps.push({ name: 'Remove the DNS record', status: 'ok', detail: ours ? `Deleted the *.${domain} record.` : 'There was no record of ours to delete.' });
+      } catch (err) {
+        steps.push({ name: 'Remove the DNS record', status: 'warning', detail: `Left in place: ${(err as Error).message}` });
+      }
+    }
+  } else {
+    steps.push({
+      name: 'Cloudflare',
+      status: 'warning',
+      detail: `The tunnel route and DNS record for *.${domain} stay in your Cloudflare account. Remove them there if you no longer want them.`,
+    });
+  }
+
+  savePublicAccess({
+    ...access,
+    extraDomains: (access.extraDomains ?? []).filter((d) => d.domain !== domain),
+    defaultDomain: access.defaultDomain === domain ? undefined : access.defaultDomain,
+    updatedAt: Date.now(),
+  });
+  steps.push({ name: 'Save', status: 'ok', detail: `${domain} removed.` });
+  return { ok: true, steps };
+}
+
+/** Drops the saved Cloudflare API token. Domain changes then ask for one again. */
+export function forgetApiToken(): void {
+  const access = publicAccess();
+  if (!access) throw badRequest('Public access has not been set up.');
+  savePublicAccess({ ...access, apiToken: undefined, updatedAt: Date.now() });
+}
+
+/** The saved Cloudflare API token, for listing zones without asking again. */
+export const savedApiToken = (): string | null => publicAccess()?.apiToken ?? null;
+
+/** Where new apps go when no domain is chosen. Only affects apps created from now on. */
+export function setDefaultDomain(domain: string): void {
+  const access = publicAccess();
+  if (!access) throw badRequest('Public access has not been set up.');
+  if (!configuredDomains().includes(domain)) throw badRequest('That domain is not configured.');
+  savePublicAccess({ ...access, defaultDomain: domain === access.domain ? undefined : domain, updatedAt: Date.now() });
 }

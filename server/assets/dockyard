@@ -11,11 +11,13 @@ Usage: dockyard <command>
 
 Run inside the app's git repository (it must have a GitHub remote named origin).
 
-  deploy [--name NAME] [--port PORT] [--address NAME] [--branch BRANCH] [--no-push] [--no-wait]
-         [--reset-secret]
+  deploy [--name NAME] [--port PORT] [--address NAME] [--domain DOMAIN] [--branch BRANCH]
+         [--no-push] [--no-wait] [--reset-secret]
       Registers the app on Dockyard if it is new (needs --port), adds
       .github/workflows/dockyard.yml, pushes, and waits until the app is live.
       Safe to run again: later runs update and redeploy the same app.
+      --domain picks which of the server's public domains the app lives under
+      (see `dockyard guide`); without it, the server's default domain is used.
       The workflow signs its call with the repository secret DOCKYARD_HOOK_SECRET.
       When the server has a GitHub token (dashboard's GitHub & Deploy Hooks page), it adds
       that secret to the repository itself if it is missing; --reset-secret makes it
@@ -225,12 +227,13 @@ wait_for_deploy() {
 }
 
 cmd_deploy() {
-  local name="" port="" address="" branch="" push=1 wait=1 reset_secret=false
+  local name="" port="" address="" domain="" branch="" push=1 wait=1 reset_secret=false
   while [ $# -gt 0 ]; do
     case "$1" in
       --name) name=${2-}; shift 2 ;;
       --port) port=${2-}; shift 2 ;;
       --address) address=${2-}; shift 2 ;;
+      --domain) domain=${2-}; shift 2 ;;
       --branch) branch=${2-}; shift 2 ;;
       --no-push) push=0; shift ;;
       --no-wait) wait=0; shift ;;
@@ -252,15 +255,15 @@ cmd_deploy() {
   if [ -z "$app" ]; then
     [ -n "$port" ] || die "this app is not on Dockyard yet. Pass --port <the port it listens on inside the container>."
     [ -n "$name" ] || name=$(basename "$root")
-    created=$(api POST /api/apps "$(jq -nc --arg name "$name" --arg image "$image:latest" --arg slug "$address" --arg port "$port" \
-      '{name: $name, sourceType: "image", image: $image, port: ($port | tonumber), deploy: false} + (if $slug != "" then {slug: $slug} else {} end)')") || exit 1
+    created=$(api POST /api/apps "$(jq -nc --arg name "$name" --arg image "$image:latest" --arg slug "$address" --arg port "$port" --arg domain "$domain" \
+      '{name: $name, sourceType: "image", image: $image, port: ($port | tonumber), deploy: false} + (if $slug != "" then {slug: $slug} else {} end) + (if $domain != "" then {domain: $domain} else {} end)')") || exit 1
     app=$(printf '%s' "$created" | jq -r .id)
     echo "Registered \"$name\" on Dockyard."
   else
     echo "Found this repository's app on Dockyard."
-    if [ -n "$name$port$address" ]; then
-      patch=$(jq -nc --arg name "$name" --arg slug "$address" --arg port "$port" \
-        '(if $name != "" then {name: $name} else {} end) + (if $slug != "" then {slug: $slug} else {} end) + (if $port != "" then {port: ($port | tonumber)} else {} end)')
+    if [ -n "$name$port$address$domain" ]; then
+      patch=$(jq -nc --arg name "$name" --arg slug "$address" --arg port "$port" --arg domain "$domain" \
+        '(if $name != "" then {name: $name} else {} end) + (if $slug != "" then {slug: $slug} else {} end) + (if $port != "" then {port: ($port | tonumber)} else {} end) + (if $domain != "" then {domain: $domain} else {} end)')
       api PATCH "/api/apps/$app" "$patch" >/dev/null
       echo "Updated its settings."
     fi

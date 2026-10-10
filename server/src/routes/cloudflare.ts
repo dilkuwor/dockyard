@@ -1,15 +1,31 @@
 import type { FastifyInstance } from 'fastify';
 import {
+  addDomain,
   disablePublicAccess,
   enablePublicAccess,
+  forgetApiToken,
   forgetPublicAccess,
   listZones,
+  savedApiToken,
+  normalizeDomain,
+  removeDomain,
+  setDefaultDomain,
   setupAutomatic,
   setupManual,
 } from '../cloudflare.js';
+import { db } from '../db.js';
 import { config } from '../config.js';
 import { connectorState } from '../docker.js';
-import { appUrl, completeOnboarding, dashboardUrl, onboardingPending, publicAccess } from '../site.js';
+import { appUrl, completeOnboarding, configuredDomains, dashboardUrl, defaultDomain, onboardingPending, publicAccess } from '../site.js';
+
+/** Apps assigned to a domain. Apps with no domain count towards the dashboard's. */
+function appsOn(domain: string): number {
+  const primary = publicAccess()?.domain;
+  const row = db
+    .prepare(domain === primary ? 'SELECT COUNT(*) AS n FROM apps WHERE domain IS NULL OR domain = ?' : 'SELECT COUNT(*) AS n FROM apps WHERE domain = ?')
+    .get(domain) as { n: number };
+  return row.n;
+}
 
 /** What the dashboard shows about public access. Never includes the tunnel token. */
 async function status() {
@@ -21,6 +37,14 @@ async function status() {
     mode: access?.mode ?? null,
     domain: access?.domain ?? null,
     connector: (await connectorState()).status,
+    // Whether the Cloudflare API token from setup is saved, so domain changes need no pasting.
+    hasApiToken: Boolean(access?.apiToken),
+    domains: configuredDomains().map((domain) => ({
+      domain,
+      primary: domain === access?.domain,
+      default: domain === defaultDomain(),
+      apps: appsOn(domain),
+    })),
     dashboardUrl: dashboardUrl(),
     localDashboardUrl: `http://${config.dashboardSubdomain}.${config.localDomain}${port}`,
     exampleAppUrl: appUrl('my-app'),
@@ -30,10 +54,15 @@ async function status() {
 export async function cloudflareRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/cloudflare', async () => status());
 
-  /** Checks an API token and lists the domains it can manage. Nothing is stored. */
+  /** Checks an API token and lists the domains it can manage. A blank token means the saved one. */
   app.post('/api/cloudflare/zones', async (req) => {
     const { apiToken } = (req.body ?? {}) as { apiToken?: unknown };
-    return listZones(String(apiToken ?? '').trim());
+    return listZones(String(apiToken ?? '').trim() || savedApiToken() || '');
+  });
+
+  app.delete('/api/cloudflare/token', async () => {
+    forgetApiToken();
+    return status();
   });
 
   app.post('/api/cloudflare/setup', async (req) => {
@@ -52,6 +81,30 @@ export async function cloudflareRoutes(app: FastifyInstance): Promise<void> {
     const body = (req.body ?? {}) as { domain?: unknown; tunnelToken?: unknown };
     const result = await setupManual({ domain: String(body.domain ?? ''), tunnelToken: String(body.tunnelToken ?? '') });
     return { ...result, status: await status() };
+  });
+
+  /** Adds a domain to this install's tunnel, with the saved API token unless one is given. */
+  app.post('/api/cloudflare/domains', async (req) => {
+    const body = (req.body ?? {}) as { apiToken?: unknown; zoneId?: unknown; domain?: unknown; replaceDns?: unknown };
+    const result = await addDomain({
+      apiToken: String(body.apiToken ?? ''),
+      zoneId: String(body.zoneId ?? ''),
+      domain: String(body.domain ?? ''),
+      replaceDns: body.replaceDns === true,
+    });
+    return { ...result, status: await status() };
+  });
+
+  app.delete<{ Params: { domain: string } }>('/api/cloudflare/domains/:domain', async (req) => {
+    const domain = normalizeDomain(req.params.domain);
+    const { apiToken } = (req.body ?? {}) as { apiToken?: unknown };
+    const result = await removeDomain(domain, apiToken ? String(apiToken) : undefined, appsOn(domain));
+    return { ...result, status: await status() };
+  });
+
+  app.post<{ Params: { domain: string } }>('/api/cloudflare/domains/:domain/default', async (req) => {
+    setDefaultDomain(normalizeDomain(req.params.domain));
+    return status();
   });
 
   app.post('/api/cloudflare/disable', async () => {

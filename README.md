@@ -82,10 +82,24 @@ Your domain must already be on Cloudflare. Then, on the first-run screen or unde
 Dockyard then creates a tunnel named `dockyard-yourdomain`, routes `*.yourdomain`
 to it, adds the wildcard DNS record, adds a WAF rule so deploy hooks get past Super
 Bot Fight Mode, starts the connector, and checks that the public address answers.
-Each step is reported. The API token is used once and is not stored.
+Each step is reported. The API token is kept, encrypted like the other settings,
+so domains can be added later without pasting it again; "Forget token" under
+Public access drops it.
 
 Apps are then served at `https://<name>.yourdomain` and the dashboard at
 `https://dockyard.yourdomain`. The local addresses keep working.
+
+### More than one domain
+
+Under **Settings → Public access → Domains** you can add further domains from the
+same Cloudflare account, using the API token saved at setup. Each one gets a route
+on the existing tunnel and a wildcard DNS record, so nothing changes on the machine. Pick a domain per app when
+creating it or on its Settings tab, with `dockyard deploy --domain example.com`, or
+through the API. Apps created without a choice go to the **default** domain, which
+you can switch in the same list; changing it only affects apps created afterwards.
+The dashboard and deploy hooks stay on the domain chosen at setup. Address names
+remain unique across all domains, since routing matches the first label only, so an
+app also answers at its name under the other domains.
 
 Good to know:
 

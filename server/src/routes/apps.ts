@@ -12,7 +12,7 @@ import {
 } from '../docker.js';
 import { getServiceImage, imageCompose, parseCompose, validateCompose } from '../compose.js';
 import { appEnv, enqueueDeploy } from '../deployer.js';
-import { addressDomain, appUrl, dashboardUrl, publicDomain } from '../site.js';
+import { addressDomain, appUrl, configuredDomains, dashboardUrl, defaultDomain, publicAccess, publicDomain } from '../site.js';
 import { badRequest, HttpError, notFound } from '../errors.js';
 import { generateSlug } from '../slug.js';
 import { globalHookEnabled } from './hooks.js';
@@ -53,7 +53,8 @@ function toDto(app: AppRow) {
     id: app.id,
     name: app.name,
     slug: app.slug,
-    url: appUrl(app.slug),
+    domain: app.domain,
+    url: appUrl(app.slug, app.domain),
     sourceType: app.source_type,
     primaryService: app.primary_service,
     port: app.port,
@@ -78,6 +79,16 @@ function validPort(port: unknown): number {
 }
 
 const SLUG = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** One of the configured public domains, or null for the dashboard's. Empty means "the default". */
+function validDomain(domain: unknown): string | null {
+  const value = String(domain ?? '').trim().toLowerCase();
+  if (!value) return defaultDomain();
+  const domains = configuredDomains();
+  if (!domains.length) throw badRequest('Set up public access before choosing a domain.');
+  if (!domains.includes(value)) throw badRequest(`Choose one of this Dockyard's domains: ${domains.join(', ')}.`);
+  return value;
+}
 
 /** A subdomain the user picked instead of a random one. One level only, so the wildcard certificate covers it. */
 function validSlug(slug: unknown, appId?: string): string {
@@ -108,6 +119,9 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     dashboardUrl: dashboardUrl(),
     publicAccess: publicDomain() !== null,
     globalHook: globalHookEnabled(),
+    // Public domains apps can be placed under, and the one used when none is given.
+    domains: configuredDomains(),
+    defaultDomain: defaultDomain(),
     // True when Dockyard can store deploy hook secrets in GitHub repositories itself.
     github: hasGithubToken(),
     registries: {
@@ -128,6 +142,8 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     const port = validPort(body.port ?? 80);
     const sourceType = body.sourceType === 'compose' ? 'compose' : 'image';
     const slug = String(body.slug ?? '').trim() ? validSlug(body.slug) : null;
+    // Resolved now and stored, so a later change of the default domain only affects newer apps.
+    const domain = publicAccess() ? validDomain(body.domain) : null;
 
     let composeText: string;
     let primaryService: string;
@@ -155,14 +171,15 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
       env_enc: null,
       hook_secret_enc: encrypt(newHookSecret()),
       current_deployment_id: null,
+      domain,
       created_at: now,
       updated_at: now,
     };
     db.prepare(
       `INSERT INTO apps (id, name, slug, source_type, compose, primary_service, port, env_enc, hook_secret_enc,
-        current_deployment_id, created_at, updated_at)
+        current_deployment_id, domain, created_at, updated_at)
        VALUES (@id, @name, @slug, @source_type, @compose, @primary_service, @port, @env_enc, @hook_secret_enc,
-        @current_deployment_id, @created_at, @updated_at)`,
+        @current_deployment_id, @domain, @created_at, @updated_at)`,
     ).run(row);
 
     if (body.deploy !== false) enqueueDeploy(row.id, { trigger: 'create' });
@@ -182,14 +199,15 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     const name = body.name !== undefined ? validName(body.name) : row.name;
     const port = body.port !== undefined ? validPort(body.port) : row.port;
     const slug = body.slug !== undefined ? validSlug(body.slug, row.id) : row.slug;
+    const domain = body.domain !== undefined ? validDomain(body.domain) : row.domain;
     const composeText = body.compose !== undefined ? String(body.compose) : row.compose;
     const primaryService =
       body.primaryService !== undefined ? String(body.primaryService).trim() : row.primary_service;
 
     validateCompose(parseCompose(composeText), primaryService);
     db.prepare(
-      'UPDATE apps SET name = ?, slug = ?, port = ?, compose = ?, primary_service = ?, updated_at = ? WHERE id = ?',
-    ).run(name, slug, port, composeText, primaryService, Date.now(), row.id);
+      'UPDATE apps SET name = ?, slug = ?, domain = ?, port = ?, compose = ?, primary_service = ?, updated_at = ? WHERE id = ?',
+    ).run(name, slug, domain, port, composeText, primaryService, Date.now(), row.id);
     return toDto(getApp(row.id));
   });
 

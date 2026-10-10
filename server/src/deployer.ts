@@ -94,7 +94,7 @@ async function runDeployment(deploymentId: string): Promise<void> {
   db.prepare("UPDATE deployments SET status = 'running' WHERE id = ?").run(deploymentId);
 
   try {
-    log(`Deploying ${app.name} to ${appUrl(app.slug)}`);
+    log(`Deploying ${app.name} to ${appUrl(app.slug, app.domain)}`);
     if (deployment.image) log(`Image: ${deployment.image}`);
 
     const rendered = renderCompose(deployment.compose, {
@@ -122,7 +122,7 @@ async function runDeployment(deploymentId: string): Promise<void> {
       Date.now(),
       app.id,
     );
-    log(`\nLive at ${appUrl(app.slug)}`);
+    log(`\nLive at ${appUrl(app.slug, app.domain)}`);
     finish('succeeded');
   } catch (err) {
     log(`\nDeployment failed: ${(err as Error).message}`);
