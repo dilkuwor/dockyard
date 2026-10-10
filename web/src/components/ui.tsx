@@ -96,8 +96,18 @@ export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cx(inputBase, props.className)} />
 }
 
+// A chevron drawn by us, so it sits at a consistent distance from the edge in every browser and theme.
+const chevron =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a94a6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")"
+
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={cx(inputBase, props.className)} />
+  return (
+    <select
+      {...props}
+      className={cx(inputBase, 'cursor-pointer appearance-none bg-no-repeat pr-9', props.className)}
+      style={{ backgroundImage: chevron, backgroundPosition: 'right 0.65rem center', backgroundSize: '1rem 1rem', ...props.style }}
+    />
+  )
 }
 
 export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
