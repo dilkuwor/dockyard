@@ -169,8 +169,11 @@ chmod +x ~/.local/bin/dockyard`
           {setup}
         </pre>
 
-        <div className="rounded-md bg-paper p-3 text-xs text-ink-soft">
-          Prompt your agent: <span className="font-semibold text-ink font-mono">{prompt}</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-paper p-3 text-xs text-ink-soft">
+          <p>
+            Prompt your agent: <span className="font-semibold text-ink font-mono">{prompt}</span>
+          </p>
+          <CopyButton value={prompt} label="Copy prompt" />
         </div>
       </Card>
     </div>
