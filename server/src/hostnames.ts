@@ -116,11 +116,14 @@ export async function removeHostname(app: AppRow, value: unknown): Promise<Setup
   return { ok: true, steps };
 }
 
-/** For the hostnames table on an app: which still route (file present) and whether Cloudflare was involved. */
-export function hostnameDetails(appId: string): { hostname: string; cloudflare: boolean; createdAt: number }[] {
+/**
+ * For the hostnames table on an app. `cloudflare` says who set up the DNS and tunnel side:
+ * Dockyard ("managed"), nobody needed to ("wildcard"), or the user must ("manual").
+ */
+export function hostnameDetails(appId: string): { hostname: string; cloudflare: 'managed' | 'wildcard' | 'manual'; createdAt: number }[] {
   return (db.prepare('SELECT * FROM hostnames WHERE app_id = ? ORDER BY created_at').all(appId) as HostnameRow[]).map((r) => ({
     hostname: r.hostname,
-    cloudflare: r.zone_id !== null,
+    cloudflare: r.zone_id !== null ? 'managed' : coveredByWildcard(r.hostname) ? 'wildcard' : 'manual',
     createdAt: r.created_at,
   }));
 }

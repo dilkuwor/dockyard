@@ -36,7 +36,8 @@ export interface AddonInfo {
 
 export interface HostnameInfo {
   hostname: string
-  cloudflare: boolean
+  /** Who set up DNS and the tunnel route: Dockyard, nobody needed to, or the user still has to. */
+  cloudflare: 'managed' | 'wildcard' | 'manual'
   createdAt: number
 }
 

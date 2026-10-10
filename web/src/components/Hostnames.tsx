@@ -59,7 +59,13 @@ export default function Hostnames({ app, onChange }: { app: AppDetail; onChange:
                 <IconExternalLink className="size-3 opacity-60" />
               </a>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-ink-soft">{h.cloudflare ? 'DNS and route by Dockyard' : 'Covered by a domain wildcard'}</span>
+                <span className={`text-xs ${h.cloudflare === 'manual' ? 'font-medium text-warn' : 'text-ink-soft'}`}>
+                  {h.cloudflare === 'managed'
+                    ? 'DNS and route by Dockyard'
+                    : h.cloudflare === 'wildcard'
+                      ? 'Covered by a domain wildcard'
+                      : 'Needs a tunnel route and DNS record in Cloudflare: no API token was saved when it was added'}
+                </span>
                 <Button
                   size="sm"
                   variant="quiet"
