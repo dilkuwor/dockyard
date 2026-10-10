@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { api } from '../api'
 import { cx, useResource, useTheme } from '../lib'
-import { Button, Logo } from './ui'
+import { AppAvatar, Button, Logo } from './ui'
 import {
   IconApps,
   IconDashboard,
@@ -325,26 +325,48 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
         <div className={cx('flex-1 overflow-y-auto px-3 py-4 space-y-6', collapsed && 'md:px-2')}>
           {/* Active App Context Box when deep inside an app */}
           {isAppScoped && activeAppId && (
-            <Link
-              to="/"
-              title="All apps"
-              className={cx(
-                'flex items-center gap-2 rounded-lg border border-rule bg-paper px-2.5 py-2 text-ink-soft transition-colors hover:text-ink',
-                collapsed && 'md:justify-center md:px-0',
-              )}
-            >
-              <IconChevronLeft className="size-3.5 shrink-0" />
-              <span className={cx('min-w-0', collapsed && 'md:hidden')}>
-                <span className="block text-[10px] font-semibold tracking-wide uppercase">All apps</span>
-                <span className="flex items-center gap-1.5 truncate text-sm font-semibold text-ink">
-                  <span className={cx(
-                    'size-1.5 shrink-0 rounded-full',
-                    currentApp?.state === 'running' ? 'bg-starboard' : currentApp?.state === 'partial' ? 'bg-warn' : 'bg-ink-soft/40'
-                  )} />
-                  <span className="truncate">{currentApp?.name ?? activeAppId}</span>
+            <div className={cx('space-y-1.5', collapsed && 'md:space-y-0')}>
+              <Link
+                to="/"
+                className={cx(
+                  'flex items-center gap-1 px-1 text-[11px] font-semibold tracking-wide text-ink-soft uppercase transition-colors hover:text-ink',
+                  collapsed && 'md:hidden',
+                )}
+              >
+                <IconChevronLeft className="size-3" />
+                All apps
+              </Link>
+              <Link
+                to={`/apps/${activeAppId}`}
+                title={currentApp?.name ?? 'This app'}
+                className={cx(
+                  'flex items-center gap-2.5 rounded-lg border border-accent/25 bg-accent/5 px-2.5 py-2 transition-colors hover:bg-accent/10',
+                  collapsed && 'md:justify-center md:border-0 md:bg-transparent md:px-0',
+                )}
+              >
+                <AppAvatar id={activeAppId} name={currentApp?.name ?? '?'} className="size-7 rounded-md text-xs" />
+                <span className={cx('min-w-0', collapsed && 'md:hidden')}>
+                  <span className="block truncate text-sm font-semibold text-ink">{currentApp?.name ?? activeAppId}</span>
+                  <span className="flex items-center gap-1.5 text-[11px] text-ink-soft">
+                    <span
+                      className={cx(
+                        'size-1.5 shrink-0 rounded-full',
+                        currentApp?.state === 'running' ? 'bg-starboard' : currentApp?.state === 'partial' ? 'bg-warn' : 'bg-ink-soft/40',
+                      )}
+                    />
+                    {currentApp?.state === 'running'
+                      ? 'Running'
+                      : currentApp?.state === 'partial'
+                        ? 'Partially running'
+                        : currentApp?.state === 'stopped'
+                          ? 'Stopped'
+                          : currentApp
+                            ? 'Not deployed'
+                            : 'Loading…'}
+                  </span>
                 </span>
-              </span>
-            </Link>
+              </Link>
+            </div>
           )}
 
           {/* Global Navigation Groups */}
