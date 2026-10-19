@@ -82,7 +82,8 @@ export const ADDONS: Record<AddonType, AddonSpec> = {
       const secretKey = secret();
       return {
         service: {
-          image: 'minio/minio:latest',
+          // MinIO no longer publishes images; Chainguard builds them from MinIO's source.
+          image: 'cgr.dev/chainguard/minio:latest',
           command: ['server', '/data'],
           environment: { MINIO_ROOT_USER: accessKey, MINIO_ROOT_PASSWORD: secretKey },
           volumes: ['minio-data:/data'],
