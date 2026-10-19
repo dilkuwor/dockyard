@@ -130,6 +130,33 @@ export interface ContainerStats {
   memoryPercent: string
 }
 
+export interface PlatformHealth {
+  checkedAt: number
+  dockyard: { status: 'healthy'; uptimeSeconds: number; memoryBytes: number }
+  docker: { status: 'healthy' | 'unavailable'; version: string | null }
+  services: (ContainerStats & {
+    id: string
+    image: string
+    state: string
+    status: string
+    health: string
+  })[]
+  storage: { type: string; totalCount: number; activeCount: number; size: string; reclaimable: string }[]
+  apps: {
+    id: string
+    name: string
+    slug: string
+    previewOf: string | null
+    branch: string | null
+    containerCount: number
+    containerWritableBytes: number | null
+    volumeCount: number
+    volumeBytes: number | null
+    imageCount: number
+    imageBytesEstimate: number | null
+  }[]
+}
+
 export interface EnvVar {
   key: string
   value: string
@@ -300,6 +327,7 @@ export const api = {
   rotateHook: (id: string) => request<{ url: string; secret: string }>('POST', `/api/apps/${id}/hook/rotate`),
 
   stats: (id: string) => request<ContainerStats[]>('GET', `/api/apps/${id}/stats`),
+  platformHealth: () => request<PlatformHealth>('GET', '/api/platform/health'),
 
   unusedImages: () => request<{ images: UnusedImage[]; totalBytes: number }>('GET', '/api/images/unused'),
   pruneImages: () => request<{ removed: number; failed: number; bytes: number }>('POST', '/api/images/prune'),

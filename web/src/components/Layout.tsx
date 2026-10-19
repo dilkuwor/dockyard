@@ -6,6 +6,7 @@ import { AppAvatar, Button, Logo } from './ui'
 import {
   IconApps,
   IconDashboard,
+  IconActivity,
   IconImages,
   IconAgent,
   IconWebhook,
@@ -118,8 +119,14 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
       title: 'Infrastructure',
       items: [
         {
+          to: '/health',
+          label: 'Platform Health',
+          icon: IconActivity,
+          active: pathname.startsWith('/health'),
+        },
+        {
           to: '/images',
-          label: 'Images & Storage',
+          label: 'Image Cleanup',
           icon: IconImages,
           active: pathname.startsWith('/images'),
         },
@@ -130,20 +137,20 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
       items: [
         {
           to: '/agents',
-          label: 'Access Tokens',
+          label: 'Agent Access',
           icon: IconAgent,
           active: pathname.startsWith('/agents'),
         },
         {
           to: '/ci',
-          label: 'Deploy Hooks',
+          label: 'Deploy Webhooks',
           icon: IconWebhook,
           active: pathname.startsWith('/ci'),
         },
       ],
     },
     {
-      title: 'Platform',
+      title: 'Administration',
       items: [
         {
           to: '/settings',
@@ -153,7 +160,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
         },
         {
           to: '/help',
-          label: 'CLI & Docs',
+          label: 'CLI & Documentation',
           icon: IconHelp,
           active: pathname.startsWith('/help'),
         },
@@ -170,12 +177,13 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
 
   const quickLinks = [
     { to: '/', label: 'Dashboard Overview', icon: IconDashboard },
+    { to: '/health', label: 'Platform Health & Resource Usage', icon: IconActivity },
     { to: '/apps/new', label: 'Create New Application', icon: IconPlus },
-    { to: '/images', label: 'Unused Images & Prune', icon: IconImages },
-    { to: '/agents', label: 'Access Tokens & Setup', icon: IconAgent },
-    { to: '/ci', label: 'Deploy Hooks', icon: IconWebhook },
-    { to: '/settings', label: 'Settings: Password, Public Access & Registries', icon: IconSettings },
-    { to: '/help', label: 'CLI Installation & Guide', icon: IconTerminal },
+    { to: '/images', label: 'Image Cleanup & Prune', icon: IconImages },
+    { to: '/agents', label: 'Agent Access & Setup', icon: IconAgent },
+    { to: '/ci', label: 'Deploy Webhooks', icon: IconWebhook },
+    { to: '/settings', label: 'Settings: Access, Networking & Maintenance', icon: IconSettings },
+    { to: '/help', label: 'CLI & Documentation', icon: IconTerminal },
   ].filter((l) => l.label.toLowerCase().includes(query.toLowerCase()))
 
   return (

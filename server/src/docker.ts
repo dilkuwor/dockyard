@@ -138,6 +138,213 @@ export interface ContainerStats {
   memoryPercent: string;
 }
 
+export interface PlatformContainer extends ContainerStats {
+  id: string;
+  image: string;
+  state: string;
+  status: string;
+  health: string;
+}
+
+export interface DockerStorage {
+  type: string;
+  totalCount: number;
+  activeCount: number;
+  size: string;
+  reclaimable: string;
+}
+
+export interface ManagedAppStorageInput {
+  id: string;
+  name: string;
+  slug: string;
+  previewOf: string | null;
+  branch: string | null;
+}
+
+export interface ManagedAppStorage extends ManagedAppStorageInput {
+  containerCount: number;
+  containerWritableBytes: number | null;
+  volumeCount: number;
+  volumeBytes: number | null;
+  imageCount: number;
+  imageBytesEstimate: number | null;
+}
+
+function dockerSizeBytes(size: string): number | null {
+  const match = /^([\d.]+)\s*(B|kB|MB|GB|TB|KiB|MiB|GiB|TiB)$/i.exec(size.trim());
+  if (!match) return null;
+  const value = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  const multipliers: Record<string, number> = {
+    b: 1,
+    kb: 1_000,
+    mb: 1_000_000,
+    gb: 1_000_000_000,
+    tb: 1_000_000_000_000,
+    kib: 1_024,
+    mib: 1_048_576,
+    gib: 1_073_741_824,
+    tib: 1_099_511_627_776,
+  };
+  return Number.isFinite(value) ? Math.round(value * multipliers[unit]) : null;
+}
+
+/** Storage attributed to Dockyard-managed Compose projects; image totals are estimates. */
+export async function managedAppStorage(apps: ManagedAppStorageInput[]): Promise<ManagedAppStorage[]> {
+  const projects = new Map(apps.map((app) => [projectName(app.id), app]));
+  const totals = new Map<string, ManagedAppStorage>(
+    apps.map((app) => [
+      app.id,
+      { ...app, containerCount: 0, containerWritableBytes: 0, volumeCount: 0, volumeBytes: 0, imageCount: 0, imageBytesEstimate: 0 },
+    ]),
+  );
+  if (projects.size === 0) return [];
+
+  const list = await run([
+    'ps', '-a', '--filter', 'label=com.docker.compose.project', '--format',
+    '{{.ID}}\t{{.Label "com.docker.compose.project"}}',
+  ]);
+  if (list.code !== 0) throw new Error(`Could not list managed app containers: ${lastLine(list.stderr)}`);
+  const containers = list.stdout.split('\n').filter(Boolean).map((line) => {
+    const [id, project] = line.split('\t');
+    return { id, project };
+  }).filter((container) => projects.has(container.project));
+
+  const imageIdsByProject = new Map<string, Set<string>>();
+  const volumeNamesByProject = new Map<string, Set<string>>();
+  const writableBytesKnown = new Map<string, boolean>();
+  const inspected = containers.length
+    ? await run([
+        'inspect', '--size', '--format',
+        '{{.Id}}\t{{.Image}}\t{{.SizeRw}}\t{{index .Config.Labels "com.docker.compose.project"}}\t{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}},{{end}}{{end}}',
+        ...containers.map((container) => container.id),
+      ])
+    : { code: 0, stdout: '', stderr: '' };
+  if (inspected.code !== 0) throw new Error(`Could not inspect managed app containers: ${lastLine(inspected.stderr)}`);
+  for (const line of inspected.stdout.split('\n').filter(Boolean)) {
+    const [, imageId, rawWritableBytes, project, rawVolumeNames = ''] = line.split('\t');
+    const app = projects.get(project);
+    if (!app) continue;
+    const total = totals.get(app.id)!;
+    total.containerCount += 1;
+    const writableBytes = Number(rawWritableBytes);
+    if (rawWritableBytes && Number.isFinite(writableBytes)) {
+      total.containerWritableBytes = (total.containerWritableBytes ?? 0) + writableBytes;
+    } else {
+      writableBytesKnown.set(app.id, false);
+    }
+    if (!imageIdsByProject.has(app.id)) imageIdsByProject.set(app.id, new Set());
+    imageIdsByProject.get(app.id)!.add(imageId);
+    if (!volumeNamesByProject.has(app.id)) volumeNamesByProject.set(app.id, new Set());
+    for (const name of rawVolumeNames.split(',').filter(Boolean)) volumeNamesByProject.get(app.id)!.add(name);
+  }
+  for (const [appId, known] of writableBytesKnown) {
+    if (!known) totals.get(appId)!.containerWritableBytes = null;
+  }
+
+  const storageResult = await run(['system', 'df', '--verbose', '--format', 'json'], { timeoutMs: 30_000 });
+  if (storageResult.code !== 0) throw new Error(`Could not inspect managed app storage: ${lastLine(storageResult.stderr)}`);
+  const report = JSON.parse(storageResult.stdout) as {
+    Volumes?: { Name?: string; Labels?: string; Size?: string }[];
+  };
+  const volumeSizeByName = new Map((report.Volumes ?? []).map((volume) => [volume.Name ?? '', dockerSizeBytes(volume.Size ?? '')]));
+  for (const volume of report.Volumes ?? []) {
+    const labels = (volume.Labels ?? '').split(',').map((label) => label.trim());
+    const projectLabel = labels.find((label) => label.startsWith('com.docker.compose.project='));
+    const app = projectLabel ? projects.get(projectLabel.slice('com.docker.compose.project='.length)) : undefined;
+    if (!app) continue;
+    if (!volumeNamesByProject.has(app.id)) volumeNamesByProject.set(app.id, new Set());
+    volumeNamesByProject.get(app.id)!.add(volume.Name ?? '');
+  }
+  for (const [appId, names] of volumeNamesByProject) {
+    const total = totals.get(appId)!;
+    let bytes = 0;
+    let known = true;
+    total.volumeCount = names.size;
+    for (const name of names) {
+      const volumeBytes = volumeSizeByName.get(name);
+      if (volumeBytes === undefined || volumeBytes === null) known = false;
+      else bytes += volumeBytes;
+    }
+    total.volumeBytes = known ? bytes : null;
+  }
+
+  const imageIds = [...new Set([...imageIdsByProject.values()].flatMap((ids) => [...ids]))];
+  const imageResult = imageIds.length
+    ? await run(['image', 'inspect', '--format', '{{.Id}}\t{{.Size}}', ...imageIds])
+    : { code: 0, stdout: '', stderr: '' };
+  if (imageResult.code !== 0) throw new Error(`Could not inspect managed app images: ${lastLine(imageResult.stderr)}`);
+  const imageSizes = new Map(imageResult.stdout.split('\n').filter(Boolean).map((line) => {
+    const [id, size] = line.split('\t');
+    return [id, Number(size)] as const;
+  }));
+  for (const [appId, ids] of imageIdsByProject) {
+    const total = totals.get(appId)!;
+    total.imageCount = ids.size;
+    total.imageBytesEstimate = 0;
+    for (const id of ids) {
+      const size = imageSizes.get(id);
+      if (size === undefined || !Number.isFinite(size)) {
+        total.imageBytesEstimate = null;
+        break;
+      }
+      total.imageBytesEstimate += size;
+    }
+  }
+  return [...totals.values()];
+}
+
+/** Resource and storage information for services in Dockyard's Compose project. */
+export async function platformContainers(): Promise<PlatformContainer[]> {
+  const ps = await run([
+    'ps', '-a', '--filter', 'label=com.docker.compose.project=dockyard', '--format', '{{json .}}',
+  ]);
+  if (ps.code !== 0) throw new Error(`Could not list Dockyard services: ${lastLine(ps.stderr)}`);
+  const containers = parseJsonOutput(ps.stdout) as {
+    ID?: string; Names?: string; Image?: string; State?: string; Status?: string; Labels?: string;
+  }[];
+  const running = containers.filter((container) => container.State === 'running' && container.ID);
+  const statsResult = running.length
+    ? await run(['stats', '--no-stream', '--format', '{{json .}}', ...running.map((container) => container.ID!)], { timeoutMs: 15_000 })
+    : { code: 0, stdout: '', stderr: '' };
+  if (statsResult.code !== 0) throw new Error(`Could not read Dockyard service metrics: ${lastLine(statsResult.stderr)}`);
+  const stats = parseJsonOutput(statsResult.stdout) as {
+    Name?: string; CPUPerc?: string; MemUsage?: string; MemPerc?: string;
+  }[];
+  const statsByName = new Map(stats.map((stat) => [stat.Name, stat]));
+
+  return containers.map((container) => {
+    const stat = statsByName.get(container.Names);
+    return {
+      id: container.ID ?? '',
+      name: container.Names ?? '',
+      image: container.Image ?? '',
+      state: container.State ?? 'unknown',
+      status: container.Status ?? '',
+      health: / \(healthy\)/.test(container.Status ?? '') ? 'healthy' : / \(unhealthy\)/.test(container.Status ?? '') ? 'unhealthy' : '',
+      cpu: stat?.CPUPerc ?? '',
+      memory: stat?.MemUsage ?? '',
+      memoryPercent: stat?.MemPerc ?? '',
+    };
+  });
+}
+
+/** Docker daemon storage totals are host-wide because apps share the same engine. */
+export async function dockerStorage(): Promise<DockerStorage[]> {
+  const res = await run(['system', 'df', '--format', '{{json .}}'], { timeoutMs: 15_000 });
+  if (res.code !== 0) throw new Error(`Could not read Docker storage usage: ${lastLine(res.stderr)}`);
+  return (parseJsonOutput(res.stdout) as {
+    Type?: string; TotalCount?: string; Active?: string; Size?: string; Reclaimable?: string;
+  }[]).map((row) => ({
+    type: row.Type ?? 'Unknown',
+    totalCount: Number(row.TotalCount ?? 0),
+    activeCount: Number(row.Active ?? 0),
+    size: row.Size ?? '—',
+    reclaimable: row.Reclaimable ?? '—',
+  }));
+}
+
 export async function containerStats(ids: string[]): Promise<ContainerStats[]> {
   if (!ids.length) return [];
   const res = await run(['stats', '--no-stream', '--format', '{{json .}}', ...ids], { timeoutMs: 15_000 });
@@ -221,7 +428,7 @@ export async function registryLogout(registry: string): Promise<void> {
 }
 
 const CONNECTOR = 'dockyard-cloudflared';
-const lastLine = (text: string) => text.split('\n').map((line) => line.trim()).filter(Boolean).pop() ?? 'Docker did not say why.';
+export const lastLine = (text: string) => text.split('\n').map((line) => line.trim()).filter(Boolean).pop() ?? 'Docker did not say why.';
 
 /** What the connector should be started with. HTTP/2 avoids QUIC's UDP buffer needs, which containers cannot meet. */
 export const CONNECTOR_PROTOCOL = 'http2';

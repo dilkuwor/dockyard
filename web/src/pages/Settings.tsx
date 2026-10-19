@@ -76,20 +76,20 @@ export default function SettingsPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Platform Settings</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Settings</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Public access and domains, registry credentials, backups, updates, and the dashboard password.
+          Manage public networking, container access, data protection, maintenance, and dashboard security.
         </p>
       </div>
 
-      {/* Public access through Cloudflare */}
+      {/* Public networking */}
       <Card className="p-6 space-y-5">
         <div className="flex items-center gap-2.5 border-b border-rule pb-4">
           <div className="rounded-md bg-accent/10 p-2 text-accent">
             <IconExternalLink className="size-5" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-ink">Public access (Cloudflare)</h2>
+            <h2 className="text-base font-semibold text-ink">Public Networking</h2>
             <p className="text-xs text-ink-soft">
               Give apps a public HTTPS address on your own domain, or keep everything on this machine.
             </p>
@@ -101,14 +101,14 @@ export default function SettingsPage() {
       <ErrorNote error={error} />
       <ErrorNote error={removeError} />
 
-      {/* Connected Registries List */}
+      {/* Container registries */}
       <Card className="p-6 space-y-5">
         <div className="flex items-center gap-2.5 border-b border-rule pb-4">
           <div className="rounded-md bg-accent/10 p-2 text-accent">
             <IconServer className="size-5" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-ink">Connected Registries</h2>
+            <h2 className="text-base font-semibold text-ink">Container Registries</h2>
             <p className="text-xs text-ink-soft">
               Public images pull automatically without credentials. Private images use the verified keys below.
             </p>
@@ -272,14 +272,14 @@ export default function SettingsPage() {
         <Backups />
       </Card>
 
-      {/* Software update */}
+      {/* Software updates */}
       <Card className="p-6 space-y-5">
         <div className="flex items-center gap-2.5 border-b border-rule pb-4">
           <div className="rounded-md bg-accent/10 p-2 text-accent">
             <IconRotateCw className="size-5" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-ink">Software update</h2>
+            <h2 className="text-base font-semibold text-ink">Software Updates</h2>
             <p className="text-xs text-ink-soft">Update Dockyard itself from its GitHub repository, in place.</p>
           </div>
         </div>
@@ -293,7 +293,7 @@ export default function SettingsPage() {
             <IconKey className="size-5" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-ink">Admin password</h2>
+            <h2 className="text-base font-semibold text-ink">Administrator Password</h2>
             <p className="text-xs text-ink-soft">Signs you into this dashboard. Dockyard can run anything on this machine, so treat it like root.</p>
           </div>
         </div>

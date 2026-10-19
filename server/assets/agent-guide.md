@@ -34,7 +34,7 @@ The `dockyard` command below sets all of this up in one step.
     the secret in the repository for you (only when it is missing; `--reset-secret`
     overwrites it). Nothing else is needed, whatever `globalHook` says. If Dockyard's
     token cannot reach the repository, the command stops with GitHub's reason; the user
-    fixes the token's repository access on the dashboard's Deploy Hooks page.
+    fixes the token's repository access on the dashboard's Deploy Webhooks page.
   - `github: false` and `globalHook: true`: one secret is shared by all apps and **the
     user adds it to the repository by hand** (GitHub repository → Settings → Secrets and
     variables → Actions). You cannot read that secret. Ask the user to confirm it is
@@ -111,7 +111,7 @@ After this, every push to the deploy branch redeploys the app automatically.
   fix the Dockerfile or code, commit, and run `dockyard deploy` again.
 - **Dockyard could not pull the image (denied / unauthorized)**: packages on ghcr.io
   are private by default. Either the user makes the package public on GitHub, or adds
-  GitHub credentials on the dashboard's Settings page under Registry credentials (only
+  GitHub credentials on the dashboard's Settings page under Container Registries (only
   the user can; API tokens cannot manage credentials). Then run `dockyard redeploy`.
   Check `GET /api/meta`: `registries.ghcr` is `true` when Dockyard already has GitHub
   credentials.

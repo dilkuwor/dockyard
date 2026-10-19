@@ -202,7 +202,7 @@ export default function Webhook({ app }: { app: AppDetail }) {
             <li>Save this file as <span className="font-mono text-[13px]">.github/workflows/deploy.yml</span>. The image is published as <span className="font-mono text-[13px]">ghcr.io/&lt;owner&gt;/&lt;repo&gt;</span>.</li>
             <li>
               If the package is private, add GitHub credentials under <Link to="/settings" className="text-accent hover:underline">Settings</Link>,
-              Registry credentials, so Dockyard can pull the image.
+              Container Registries, so Dockyard can pull the image.
             </li>
             <li>Push to main. The new deployment shows up under Deployments.</li>
           </ol>

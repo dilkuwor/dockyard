@@ -35,10 +35,10 @@ export default function ImagesPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Images & Storage Reclamation</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Image Cleanup</h1>
         <p className="mt-1 text-sm text-ink-soft">
-          Images Dockyard previously pulled that are no longer used by any container. Removing them frees host disk space.
-          If rolled back later, Dockyard will re-pull the required image.
+          Review Docker images that are no longer used by any container and reclaim host disk space. If rolled back later, Dockyard will
+          re-pull the required image.
         </p>
       </div>
 

@@ -36,7 +36,7 @@ function GlobalHookSection() {
             <IconWebhook className="size-5" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-ink">Global Deploy Hook</h2>
+            <h2 className="text-base font-semibold text-ink">Global Deploy Webhook</h2>
             <p className="text-xs text-ink-soft">
               Use a single webhook secret across all GitHub Actions workflows instead of per-app secrets.
             </p>
@@ -140,7 +140,7 @@ export default function CiPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Deploy Hooks</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Deploy Webhooks</h1>
         <p className="mt-1 text-sm text-ink-soft">
           How GitHub Actions signs its deploy calls to this server, and whether Dockyard may store that secret in your repositories itself.
         </p>
@@ -163,7 +163,7 @@ export default function CiPage() {
             <IconKey className="size-5" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-ink">GitHub Automation</h2>
+            <h2 className="text-base font-semibold text-ink">GitHub Repository Integration</h2>
             <p className="text-xs text-ink-soft">
               Optional. Lets Dockyard put the deploy hook secret into your GitHub repositories during <span className="font-mono">dockyard deploy</span>.
             </p>

@@ -23,6 +23,9 @@ GitHub Actions ── build & push ──▶ ghcr.io / Docker Hub
   for you from the dashboard. No router ports are opened.
 - Deploys on every push through a signed hook, pinned to the exact image digest.
 - One-click rollback, encrypted environment variables, live logs, CPU and memory.
+- Platform health view for Dockyard uptime and memory, infrastructure service metrics,
+  Docker engine storage, and per-app writable layers and volumes. Per-app image sizes
+  are estimates because image layers can be shared.
 - Deploy notes: commit message, branch and image digest per deployment, and what
   changed in the compose file and variables since the one before.
 - Custom hostnames (`www.example.com`, apex domains) on top of each app's address.
@@ -57,7 +60,7 @@ forward the port first: `ssh -L 8080:localhost:8080 you@server`.
 
 The first visit asks you to create the admin password. It also asks for the setup
 code from the logs, so that only someone with access to the machine can claim a
-fresh Dockyard. The password can be changed later on the **Platform Settings**
+fresh Dockyard. The password can be changed later on the **Settings**
 page. (Older installs that set `ADMIN_PASSWORD` in `.env` keep working: it is
 imported on the next start and can then be removed from the file.)
 
@@ -68,8 +71,8 @@ Next it asks how apps should be reachable:
   by themselves; Safari may not.
 - **On the internet, with your own domain.** See the next section.
 
-You can change the answer at any time on the Platform Settings page
-(**Registry Auth** in the sidebar), under **Public access**.
+You can change the answer at any time on the **Settings** page, under
+**Public Networking**.
 
 ## Public access with Cloudflare
 
@@ -172,7 +175,7 @@ This needs public access, because GitHub has to reach Dockyard.
    Dockyard deploys that exact image digest.
 
 To use one signing secret for all apps instead of one per app, turn on the
-**Global deploy hook** on the **Deploy Hooks** page and add it to each
+**Global Deploy Webhook** on the **Deploy Webhooks** page and add it to each
 repository as the Actions secret `DOCKYARD_HOOK_SECRET`. Dockyard picks the app
 from the image name, so the secret can move an app to another build of its own
 image but not to a foreign one.
@@ -182,10 +185,10 @@ image but not to a foreign one.
 The `dockyard` command sets up the GitHub flow for a project in one step, and an
 agent such as Claude Code can run it for you.
 
-1. On the **Access Tokens** page, create an access token. It is used instead of
+1. On the **Agent Access** page, create an access token. It is used instead of
    the admin password and can be rolled or revoked at any time.
 2. Install the command on the machine where you or the agent work. The **CLI &
-   Docs** page has the commands, with this server's address filled in. It needs
+   Documentation** page has the commands, with this server's address filled in. It needs
    `git`, `curl` and `jq`.
 3. In an app's folder, run `dockyard deploy --port 3000`, or tell the agent:
    *Deploy this app to Dockyard. Run `dockyard guide` first and follow it.*
@@ -198,7 +201,7 @@ pushes it to ghcr.io, pushes the branch, and waits until the app is live.
 The workflow signs its call with the repository secret `DOCKYARD_HOOK_SECRET`, and
 there are three ways for it to get there:
 
-- Add a GitHub token on the **Deploy Hooks** page under **GitHub Automation**,
+- Add a GitHub token on the **Deploy Webhooks** page under **GitHub Repository Integration**,
   and Dockyard stores the secret in the repository itself during `dockyard deploy`.
   Use a fine-grained token with the *Secrets: Read and write* permission on the
   repositories you deploy from. An existing secret is left alone;
@@ -268,8 +271,8 @@ package is private, add credentials for ghcr.io under Settings first.
 
 ### Private images
 
-Add the registry's credentials on the Platform Settings page, under registry
-credentials. Docker Hub, ghcr.io and any other registry are supported. Credentials
+Add the registry's credentials on the Settings page, under Container
+Registries. Docker Hub, ghcr.io and any other registry are supported. Credentials
 are checked when you save them and stored encrypted. Packages on ghcr.io are
 private by default, so the GitHub flow usually needs this.
 
@@ -293,7 +296,7 @@ compose file. The service that gets the address is joined to the shared
 
 ### Cleaning up old images
 
-Every deploy pulls an image, and old ones stay on disk. The **Images & Storage**
+Every deploy pulls an image, and old ones stay on disk. The **Image Cleanup**
 page lists the images Dockyard pulled that no container uses any more and removes
 them on request. It never touches images from anything else on the machine. A
 later rollback simply pulls the image again.

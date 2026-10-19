@@ -47,7 +47,7 @@ const commands: [string, string][] = [
 const problems: [string, ReactNode][] = [
   ['command not found: dockyard', <>The folder <span className={mono}>~/.local/bin</span> is not on your PATH. Run the PATH command in step 3 and open a new terminal session.</>],
   ['DOCKYARD_URL is not set', <>The local configuration file is missing. Repeat step 1 to save config.</>],
-  ['the server did not accept DOCKYARD_TOKEN', <>The token was rolled, revoked, or mistyped. Roll it or create a new one on the <Link to="/agents" className="text-accent hover:underline">Access Tokens</Link> page and repeat step 1.</>],
+  ['the server did not accept DOCKYARD_TOKEN', <>The token was rolled, revoked, or mistyped. Roll it or create a new one on the <Link to="/agents" className="text-accent hover:underline">Agent Access</Link> page and repeat step 1.</>],
   ['missing required command: jq', <>Install <span className={mono}>jq</span> using Homebrew on macOS (<code className={mono}>brew install jq</code>) or apt on Linux.</>],
   ['run this inside the app\'s git repository', <>Navigate into your application directory first. It must be an active git repository with a GitHub remote named origin.</>],
   ['no Dockerfile at the repository root', <>Dockyard runs container images, so the repository needs a Dockerfile.</>],
@@ -79,10 +79,11 @@ dockyard deploy --name "My App" --port 3000 --address my-app`
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">CLI Tools & Deployment Documentation</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">CLI & Documentation</h1>
         <p className="mt-1 text-sm text-ink-soft">
           <span className={mono}>dockyard</span> is a lightweight CLI you run on your development computer or inside an AI agent session
-          to ship and manage apps directly from git repositories.
+          to ship and manage apps directly from git repositories. For personalized token and agent setup commands, use{' '}
+          <Link to="/agents" className="text-accent hover:underline">Agent Access</Link>.
         </p>
       </div>
 
@@ -101,7 +102,7 @@ dockyard deploy --name "My App" --port 3000 --address my-app`
         <ol className="space-y-6">
           <Step number={1} title="Save Server URL and Token">
             <p className="text-xs text-ink-soft">
-              Generate an access token on the <Link to="/agents" className="text-accent hover:underline">Access Tokens</Link> page, then run:
+              Generate an access token on the <Link to="/agents" className="text-accent hover:underline">Agent Access</Link> page, then run:
             </p>
             <Command>{saveSettings}</Command>
           </Step>

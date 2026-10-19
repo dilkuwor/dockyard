@@ -71,15 +71,15 @@ chmod +x ~/.local/bin/dockyard`
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Access Tokens</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink">Agent Access</h1>
         <p className="mt-1 text-sm text-ink-soft">
           API tokens and setup commands for autonomous AI coding agents (Claude Code, Gemini, Copilot) and scripts. How GitHub
           reaches this server is configured under{' '}
-          <Link to="/ci" className="text-accent hover:underline">Deploy Hooks</Link>.
+          <Link to="/ci" className="text-accent hover:underline">Deploy Webhooks</Link>.
         </p>
       </div>
 
-      {/* Access Tokens Management */}
+      {/* Agent token management */}
       <Card className="p-6 space-y-6">
         <div className="flex items-center gap-2.5 border-b border-rule pb-4">
           <div className="rounded-md bg-accent/10 p-2 text-accent">
@@ -187,7 +187,7 @@ chmod +x ~/.local/bin/dockyard`
               <IconTerminal className="size-5" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-ink">Agent Machine Bootstrap Setup</h2>
+              <h2 className="text-base font-semibold text-ink">Connect an Agent</h2>
               <p className="text-xs text-ink-soft">Run these commands once on the computer where the AI agent runs.</p>
             </div>
           </div>

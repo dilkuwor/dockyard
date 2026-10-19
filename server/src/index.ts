@@ -26,6 +26,7 @@ import { startBackupScheduler } from './backup.js';
 import { syncHostnameRoutes } from './hostnames.js';
 import { registryRoutes } from './routes/registries.js';
 import { cloudflareRoutes } from './routes/cloudflare.js';
+import { platformRoutes } from './routes/platform.js';
 
 const server = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true, bodyLimit: 1024 * 1024 });
 
@@ -73,6 +74,7 @@ await server.register(tokenRoutes);
 await server.register(agentRoutes);
 await server.register(registryRoutes);
 await server.register(cloudflareRoutes);
+await server.register(platformRoutes);
 await server.register(githubRoutes);
 await server.register(extrasRoutes);
 await server.register(updateRoutes);
