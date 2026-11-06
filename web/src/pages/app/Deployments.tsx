@@ -93,6 +93,7 @@ export default function Deployments({ app, onChange }: { app: AppDetail; onChang
 function DeploymentDetails({ d }: { d: Deployment }) {
   const { data: diff } = useResource(() => api.deploymentDiff(d.id), [d.id])
   const [showCompose, setShowCompose] = useState(false)
+  const [showRendered, setShowRendered] = useState(false)
   const envChanges = diff ? diff.env.added.length + diff.env.removed.length + diff.env.changed.length : 0
   const imageChanged = diff ? diff.image.before !== diff.image.after : false
   const nothingChanged = diff && diff.previous && !diff.compose.changed && envChanges === 0 && !imageChanged
@@ -151,8 +152,33 @@ function DeploymentDetails({ d }: { d: Deployment }) {
             </ul>
           )}
         </dd>
+        <dt className="text-ink-soft">Rendered</dt>
+        <dd className="text-ink">
+          What Dockyard actually runs: your compose file plus its routing labels, networks and variables.{' '}
+          <button type="button" onClick={() => setShowRendered((v) => !v)} className="font-medium text-accent hover:underline">
+            {showRendered ? 'Hide rendered file' : 'Show rendered file'}
+          </button>
+        </dd>
       </dl>
       {showCompose && diff && <div className="mt-3"><LineDiff before={diff.compose.before} after={diff.compose.after} /></div>}
+      {showRendered && <RenderedCompose id={d.id} />}
+    </div>
+  )
+}
+
+/** The compose file as deployed, with variable values shown as <NAME> so secrets stay on the Environment tab. */
+function RenderedCompose({ id }: { id: string }) {
+  const { data, error } = useResource(() => api.renderedCompose(id), [id])
+  if (error) return <div className="mt-3"><ErrorNote error={error} /></div>
+  return (
+    <div className="mt-3 space-y-1.5">
+      <p className="text-ink-soft">
+        Variable values appear as <span className="font-mono">&lt;NAME&gt;</span>; the real ones are set from the Environment tab at deploy time.
+        Rendered with the app's current settings, so an older deployment is shown as it would run today.
+      </p>
+      <pre className="max-h-96 overflow-auto rounded-md scheme-dark bg-console px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-console-text">
+        {data ?? 'Rendering…'}
+      </pre>
     </div>
   )
 }

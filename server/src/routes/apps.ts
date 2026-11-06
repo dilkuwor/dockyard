@@ -11,7 +11,7 @@ import {
   removeAppDir,
 } from '../docker.js';
 import { dropDatabase } from '../postgres.js';
-import { getServiceImage, imageCompose, parseCompose, validateCompose } from '../compose.js';
+import { getServiceImage, imageCompose, parseCompose, renderCompose, validateCompose } from '../compose.js';
 import { appEnv, enqueueDeploy } from '../deployer.js';
 import { addressDomain, appAddress, appUrl, configuredDomains, dashboardUrl, defaultDomain, publicAccess, publicDomain } from '../site.js';
 import { badRequest, HttpError, notFound } from '../errors.js';
@@ -19,7 +19,7 @@ import { generateSlug } from '../slug.js';
 import { globalHookEnabled } from './hooks.js';
 import { previewsOf, removePreviewApp } from '../previews.js';
 import { hostnamesOf } from '../hostnames.js';
-import { addonsOf, usesSharedPostgres } from '../addons.js';
+import { addonServices, addonsOf, usesSharedPostgres } from '../addons.js';
 import { hasGithubToken } from '../github.js';
 import { DOCKER_HUB, hasCredentials } from '../registries.js';
 
@@ -316,6 +316,29 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     const row = db.prepare('SELECT * FROM deployments WHERE id = ?').get(req.params.id) as DeploymentRow | undefined;
     if (!row) throw notFound('Deployment');
     return { ...deploymentSummary(row), log: row.log };
+  });
+
+  /**
+   * The compose file as Dockyard actually runs it for this deployment: labels, networks and the
+   * variables in every service. Variable values are shown as <NAME> rather than their contents.
+   */
+  app.get<{ Params: { id: string } }>('/api/deployments/:id/rendered', async (req, reply) => {
+    const row = db.prepare('SELECT * FROM deployments WHERE id = ?').get(req.params.id) as DeploymentRow | undefined;
+    if (!row) throw notFound('Deployment');
+    const owner = getApp(row.app_id);
+    const env = appEnv({ env_enc: row.env_enc ?? owner.env_enc }).map((v) => ({ key: v.key, value: `<${v.key}>` }));
+    reply.type('text/plain');
+    return renderCompose(row.compose, {
+      appId: owner.id,
+      slug: owner.slug,
+      primaryService: owner.primary_service,
+      port: owner.port,
+      env,
+      envSkip: addonServices(owner.id),
+      edgeNetwork: config.edgeNetwork,
+      dataNetwork: usesSharedPostgres(owner) ? config.dataNetwork : undefined,
+      entrypoint: config.traefikEntrypoint,
+    });
   });
 
   /** What changed in this deployment compared with the one before it. */

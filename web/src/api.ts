@@ -327,6 +327,11 @@ export const api = {
     request<{ ok: true }>('DELETE', `/api/apps/${id}?volumes=${removeVolumes}`),
   deploy: (id: string) => request<Deployment>('POST', `/api/apps/${id}/deploy`),
   deploymentDiff: (id: string) => request<DeploymentDiff>('GET', `/api/deployments/${id}/diff`),
+  renderedCompose: (id: string) =>
+    fetch(`/api/deployments/${id}/rendered`, { credentials: 'same-origin' }).then(async (r) => {
+      if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `Request failed (${r.status})`)
+      return r.text()
+    }),
   previews: (id: string) => request<AppSummary[]>('GET', `/api/apps/${id}/previews`),
   addons: (id: string) => request<AddonInfo[]>('GET', `/api/apps/${id}/addons`),
   addAddon: (id: string, type: AddonType) => request<{ ok: true; envKeys: string[]; note: string }>('POST', `/api/apps/${id}/addons`, { type }),
