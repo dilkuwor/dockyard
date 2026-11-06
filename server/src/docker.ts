@@ -433,7 +433,9 @@ export async function registryLogout(registry: string): Promise<void> {
 }
 
 const CONNECTOR = 'dockyard-cloudflared';
-export const lastLine = (text: string) => text.split('\n').map((line) => line.trim()).filter(Boolean).pop() ?? 'Docker did not say why.';
+/** The last line of Docker's complaint, skipping the "Run 'docker run --help'" footer newer CLIs add after the real reason. */
+export const lastLine = (text: string) =>
+  text.split('\n').map((line) => line.trim()).filter((line) => line && !/^(Run|See) 'docker .*--help'/.test(line)).pop() ?? 'Docker did not say why.';
 
 /** What the connector should be started with. HTTP/2 avoids QUIC's UDP buffer needs, which containers cannot meet. */
 export const CONNECTOR_PROTOCOL = 'http2';

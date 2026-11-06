@@ -124,7 +124,7 @@ export async function ensurePostgres(log: (line: string) => void = () => undefin
     if (start.code !== 0) throw new Error(`Could not start ${POSTGRES_CONTAINER}: ${lastLine(start.stderr)}`);
   } else {
     log(`Creating the shared Postgres server (${POSTGRES_CONTAINER}, ${IMAGE}).`);
-    await createContainer();
+    await createContainer(log);
   }
   await waitReady();
 }
@@ -133,6 +133,15 @@ export async function ensurePostgres(log: (line: string) => void = () => undefin
 export function accessPort(): number | null {
   const value = getSetting(ACCESS_PORT_SETTING);
   return value ? Number(value) : null;
+}
+
+/** The image is close to half a gigabyte; pulling it inside `docker run` can outlast that call's timeout on a slow link. */
+async function ensureImage(log: (line: string) => void): Promise<void> {
+  const present = await run(['image', 'inspect', '--format', '{{.Id}}', IMAGE]);
+  if (present.code === 0) return;
+  log(`Pulling ${IMAGE}.`);
+  const pull = await run(['pull', IMAGE], { timeoutMs: 900_000 });
+  if (pull.code !== 0) throw new Error(`Could not pull ${IMAGE}: ${lastLine(pull.stderr)}`);
 }
 
 /** Makes the certificate once; the volume keeps it across recreations, so clients that pinned it stay happy. */
@@ -148,7 +157,8 @@ async function ensureTls(): Promise<void> {
   if (res.code !== 0) throw new Error(`Could not make the server's TLS certificate: ${lastLine(res.stderr)}`);
 }
 
-async function createContainer(): Promise<void> {
+async function createContainer(log: (line: string) => void = () => undefined): Promise<void> {
+  await ensureImage(log);
   await ensureDataNetwork();
   await ensureTls();
   const port = accessPort();
