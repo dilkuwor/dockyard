@@ -7,6 +7,8 @@ export interface ComposeDoc extends Dict {
 }
 
 const EDGE_KEY = 'dockyard_edge';
+const DATA_KEY = 'dockyard_data';
+const RESERVED_NETWORKS = [EDGE_KEY, DATA_KEY];
 const RESERVED_LABEL = /^(traefik|dockyard)\./i;
 const HOST_VALUES = new Set(['host']);
 
@@ -98,7 +100,9 @@ export function validateCompose(doc: ComposeDoc, primaryService: string): void {
     if (svc.volumes_from) p('"volumes_from" is not allowed.');
 
     const networks = Array.isArray(svc.networks) ? svc.networks : Object.keys(svc.networks ?? {});
-    if (networks.includes(EDGE_KEY)) p(`network "${EDGE_KEY}" is reserved; Dockyard attaches the routed service to it.`);
+    for (const key of RESERVED_NETWORKS) {
+      if (networks.includes(key)) p(`network "${key}" is reserved; Dockyard attaches services to it itself.`);
+    }
 
     const labels = labelsToMap(svc.labels);
     const reserved = Object.keys(labels).filter((k) => RESERVED_LABEL.test(k));
@@ -122,7 +126,7 @@ export function validateCompose(doc: ComposeDoc, primaryService: string): void {
   }
 
   for (const [name, net] of Object.entries((doc.networks ?? {}) as Dict)) {
-    if (name === EDGE_KEY) problems.push(`networks: "${EDGE_KEY}" is reserved.`);
+    if (RESERVED_NETWORKS.includes(name)) problems.push(`networks: "${name}" is reserved.`);
     if (net && typeof net === 'object' && (net.external || net.name)) {
       problems.push(`networks.${name}: "external" and "name" are not allowed; networks are private to each app.`);
     }
@@ -172,7 +176,19 @@ export interface RenderOptions {
   /** Services whose containers should not receive the app's variables, such as add-on databases. */
   envSkip?: string[];
   edgeNetwork: string;
+  /** When set, every service is also joined to this network, where the shared Postgres server lives. */
+  dataNetwork?: string;
   entrypoint: string;
+}
+
+function joinNetwork(svc: Dict, key: string): void {
+  if (!svc.networks) {
+    svc.networks = ['default', key];
+  } else if (Array.isArray(svc.networks)) {
+    if (!svc.networks.includes(key)) svc.networks.push(key);
+  } else {
+    svc.networks[key] = {};
+  }
 }
 
 /** Turns a validated user compose file into what actually runs. */
@@ -200,12 +216,9 @@ export function renderCompose(composeText: string, opts: RenderOptions): string 
     'traefik.docker.network': opts.edgeNetwork,
   });
 
-  if (!primary.networks) {
-    primary.networks = ['default', EDGE_KEY];
-  } else if (Array.isArray(primary.networks)) {
-    if (!primary.networks.includes(EDGE_KEY)) primary.networks.push(EDGE_KEY);
-  } else {
-    primary.networks[EDGE_KEY] = {};
+  joinNetwork(primary, EDGE_KEY);
+  if (opts.dataNetwork) {
+    for (const svc of Object.values(doc.services)) joinNetwork(svc, DATA_KEY);
   }
 
   // Every service of the app gets the variables, so a worker or API next to the routed
@@ -223,5 +236,6 @@ export function renderCompose(composeText: string, opts: RenderOptions): string 
   }
 
   doc.networks = { ...(doc.networks ?? {}), [EDGE_KEY]: { external: true, name: opts.edgeNetwork } };
+  if (opts.dataNetwork) doc.networks[DATA_KEY] = { external: true, name: opts.dataNetwork };
   return YAML.stringify(doc);
 }

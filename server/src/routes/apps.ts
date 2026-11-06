@@ -10,6 +10,7 @@ import {
   projectStates,
   removeAppDir,
 } from '../docker.js';
+import { dropDatabase } from '../postgres.js';
 import { getServiceImage, imageCompose, parseCompose, validateCompose } from '../compose.js';
 import { appEnv, enqueueDeploy } from '../deployer.js';
 import { addressDomain, appAddress, appUrl, configuredDomains, dashboardUrl, defaultDomain, publicAccess, publicDomain } from '../site.js';
@@ -18,7 +19,7 @@ import { generateSlug } from '../slug.js';
 import { globalHookEnabled } from './hooks.js';
 import { previewsOf, removePreviewApp } from '../previews.js';
 import { hostnamesOf } from '../hostnames.js';
-import { addonsOf } from '../addons.js';
+import { addonsOf, usesSharedPostgres } from '../addons.js';
 import { hasGithubToken } from '../github.js';
 import { DOCKER_HUB, hasCredentials } from '../registries.js';
 
@@ -281,6 +282,8 @@ export async function appRoutes(app: FastifyInstance): Promise<void> {
     if (res.code !== 0) {
       throw new HttpError(500, 'Could not stop the app containers.', [res.stderr.trim()].filter(Boolean));
     }
+    // The shared database goes with the volumes: kept unless the data was asked to be removed too.
+    if (req.query.volumes === 'true' && usesSharedPostgres(row)) await dropDatabase(row.id);
     removeAppDir(row.id);
     db.prepare('DELETE FROM apps WHERE id = ?').run(row.id);
     return { ok: true };

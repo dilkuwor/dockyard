@@ -101,7 +101,8 @@ CREATE TABLE IF NOT EXISTS backup_items (
   PRIMARY KEY (backup_id, app_id)
 );
 
--- Managed add-on services (Postgres, Redis, MinIO) Dockyard put into an app's compose file.
+-- Managed add-ons: services (Postgres, Redis, MinIO) Dockyard put into an app's compose file, or
+-- for 'postgres-shared', the app's database on the shared server (its name is in "service").
 CREATE TABLE IF NOT EXISTS addons (
   app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
   type TEXT NOT NULL,

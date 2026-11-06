@@ -5,6 +5,7 @@ import { cx, useResource, useTheme } from '../lib'
 import { AppAvatar, Button, Logo } from './ui'
 import {
   IconApps,
+  IconDatabase,
   IconDashboard,
   IconActivity,
   IconImages,
@@ -62,6 +63,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   const [query, setQuery] = useState('')
 
   const { data: apps, error: appsError } = useResource(api.listApps, [], 8000)
+  const { data: shared } = useResource(api.services, [], 30_000)
   const [accountOpen, setAccountOpen] = useState(false)
   const [theme, toggleTheme] = useTheme()
   // A quiet pointer when a newer Dockyard is on GitHub; checked every half hour.
@@ -95,6 +97,9 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
 
   const runningCount = apps?.filter((a) => a.state === 'running' || a.lastDeployment?.status === 'running').length ?? 0
   const totalAppsCount = apps?.length ?? 0
+  // Shared servers that exist, and how many of them are up; none exist until an app asks for one.
+  const sharedServices = shared?.services.filter((s) => s.state !== 'missing') ?? []
+  const sharedRunning = sharedServices.filter((s) => s.state === 'running').length
 
   const navGroups = [
     {
@@ -118,6 +123,13 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
     {
       title: 'Infrastructure',
       items: [
+        {
+          to: '/services',
+          label: 'Shared Services',
+          icon: IconDatabase,
+          active: pathname.startsWith('/services'),
+          badge: sharedServices.length > 0 ? `${sharedRunning}/${sharedServices.length}` : undefined,
+        },
         {
           to: '/health',
           label: 'Platform Health',
@@ -178,6 +190,7 @@ export default function Layout({ children, onSignOut }: { children: ReactNode; o
   const quickLinks = [
     { to: '/', label: 'Dashboard Overview', icon: IconDashboard },
     { to: '/health', label: 'Platform Health & Resource Usage', icon: IconActivity },
+    { to: '/services', label: 'Shared Services: Postgres', icon: IconDatabase },
     { to: '/apps/new', label: 'Create New Application', icon: IconPlus },
     { to: '/images', label: 'Image Cleanup & Prune', icon: IconImages },
     { to: '/agents', label: 'Agent Access & Setup', icon: IconAgent },

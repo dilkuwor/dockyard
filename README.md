@@ -30,7 +30,8 @@ GitHub Actions ── build & push ──▶ ghcr.io / Docker Hub
   changed in the compose file and variables since the one before.
 - Custom hostnames (`www.example.com`, apex domains) on top of each app's address.
 - Preview deployments: every branch gets its own address, removed with the branch.
-- Managed add-ons: PostgreSQL, Redis or MinIO next to the app, with the connection
+- Managed add-ons: a database on a shared PostgreSQL server, or PostgreSQL, Redis or
+  MinIO next to the app, with the connection
   details in its environment.
 - Updates itself from GitHub from the Settings page.
 - Pulls private images from Docker Hub, ghcr.io or any other registry.
@@ -233,18 +234,37 @@ the deploy branch moves the image's `latest` tag.
 
 ### Add-ons
 
-**Add-ons** on the Settings tab puts PostgreSQL 16, Redis 7 or MinIO into the app's
-compose file as another service with a named volume, and the connection details
-into its environment (`DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT` and friends).
-Deploy to start it. Removing an add-on takes the service and variables out again
-and keeps the Docker volume.
+**Add-ons** on the Settings tab gives an app a database, cache or object store,
+with the connection details in its environment (`DATABASE_URL`, `REDIS_URL`,
+`S3_ENDPOINT` and friends). Deploy afterwards.
+
+*PostgreSQL (shared server)* is the usual choice: Dockyard runs one Postgres 18
+container, `dockyard-postgres`, for every app that asks, started the first time
+it is needed, and gives the app a database and role of its own on it. The app's
+services are joined to the server's private network, `dockyard_data`, at deploy
+time; other apps' roles cannot connect to the database. A preview of the app gets
+an empty database of its own. Removing the add-on deletes the database, and so
+does deleting the app together with its data. **Shared Services** in the sidebar
+shows the server: its state, memory, data size, every database with the app it
+belongs to, and buttons to restart or stop it and read its log. Its **Direct
+access** switch publishes the server on a port of the machine Dockyard runs on,
+with the superuser sign-in shown on the page, so pgAdmin or psql can open every
+app's database: at `localhost` on that machine, or at any hostname whose DNS
+points straight at it (Cloudflare's proxy and tunnel carry web traffic only, so a
+proxied name will not do). Connections are encrypted with a certificate made once
+per install; connect with `sslmode=require`.
+
+*PostgreSQL (dedicated)*, Redis 7 and MinIO go into the app's compose file as
+another service with a named volume, for apps that need their own server, say for
+a Postgres extension or a different version. Removing one of these takes the
+service and variables out again and keeps the Docker volume.
 
 ### Backups
 
 **Settings → Backups** archives Dockyard's own settings (the database and the
 rendered compose files) and every app's data volumes into the backup directory,
 `.data/backups` next to the compose file unless `BACKUP_DIR` says otherwise. The
-Postgres add-on is dumped with `pg_dump` rather than copied, and other volumes are
+Postgres add-ons are dumped with `pg_dump` rather than copied, and other volumes are
 copied while the app is paused for a few seconds. Set a daily time and how many
 runs to keep, or click "Back up now". Previews are never included, and any app
 can be left out on its Settings tab. Restore an app's data from one of its backups
@@ -286,13 +306,15 @@ Apps share one machine, so Dockyard rejects anything that reaches outside the ap
 - `cap_add`, `devices`, `security_opt`, `sysctls`
 - bind mounts, and external or custom-named networks and volumes
 - secrets and configs read from files
-- `traefik.*` and `dockyard.*` labels, and the `dockyard_edge` network
+- `traefik.*` and `dockyard.*` labels, and the `dockyard_edge` and `dockyard_data` networks
 
 Use images, named volumes and the Environment tab instead. Variables from the
 Environment tab are set in every service of the app at deploy time, except
 add-on containers, and they also fill `${VAR}` placeholders anywhere in the
 compose file. The service that gets the address is joined to the shared
-`dockyard_edge` network; other services stay on the app's private network.
+`dockyard_edge` network; other services stay on the app's private network, unless
+the app uses the shared Postgres server, in which case all of them are joined to
+`dockyard_data` as well.
 
 ### Cleaning up old images
 

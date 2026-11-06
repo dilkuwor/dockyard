@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { api, type AddonType, type AppDetail } from '../api'
 import { Button, ErrorNote } from './ui'
 import { IconCheck, IconDatabase } from './Icons'
@@ -34,8 +35,10 @@ export default function Addons({ app, onChange }: { app: AppDetail; onChange: ()
   return (
     <div className="space-y-3">
       <p className="text-xs text-ink-soft">
-        Each add-on becomes a service in this app's compose file with its own named volume, and its connection details are put
-        into the app's environment. Changes apply on the next deploy.
+        An add-on is a service in this app's compose file with its own named volume, or a database on the Postgres server Dockyard
+        runs for all apps. Either way its connection details are put into the app's environment. Changes apply on the next deploy.
+        The shared server itself is managed on{' '}
+        <Link to="/services" className="font-medium text-accent hover:underline">Shared Services</Link>.
       </p>
       <ul className="divide-y divide-rule rounded-lg border border-rule">
         {(list ?? []).map((a) => (
@@ -55,14 +58,19 @@ export default function Addons({ app, onChange }: { app: AppDetail; onChange: ()
                   )}
                 </div>
                 <p className="mt-0.5 text-xs text-ink-soft">{a.note}</p>
-                <p className="mt-1 font-mono text-[11px] text-ink-soft">{a.envKeys.join(' · ')}</p>
+                <p className="mt-1 font-mono text-[11px] text-ink-soft">
+                  {a.kind === 'shared' && a.added ? `${a.service} · ` : ''}
+                  {a.envKeys.join(' · ')}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {a.added ? (
                 confirming === a.type ? (
                   <>
-                    <span className="text-xs text-ink-soft">Remove it? Its data volume is kept.</span>
+                    <span className="text-xs text-ink-soft">
+                      {a.kind === 'shared' ? 'Remove it? The database and everything in it are deleted.' : 'Remove it? Its data volume is kept.'}
+                    </span>
                     <Button size="sm" variant="danger" className="text-xs" busy={busy === a.type} onClick={() => act(a.type, () => api.removeAddon(app.id, a.type))}>
                       Remove
                     </Button>

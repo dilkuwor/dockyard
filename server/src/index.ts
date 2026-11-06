@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { ensureConnector, importLegacySettings } from './cloudflare.js';
 import { db, recoverInterruptedDeployments } from './db.js';
 import { dockerAvailable, ensureEdgeNetwork } from './docker.js';
+import { ensurePostgres } from './postgres.js';
 import { HttpError } from './errors.js';
 import { trackDeployedImages } from './images.js';
 import { loginRegistries } from './registries.js';
@@ -27,6 +28,7 @@ import { syncHostnameRoutes } from './hostnames.js';
 import { registryRoutes } from './routes/registries.js';
 import { cloudflareRoutes } from './routes/cloudflare.js';
 import { platformRoutes } from './routes/platform.js';
+import { serviceRoutes } from './routes/services.js';
 
 const server = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true, bodyLimit: 1024 * 1024 });
 
@@ -75,6 +77,7 @@ await server.register(agentRoutes);
 await server.register(registryRoutes);
 await server.register(cloudflareRoutes);
 await server.register(platformRoutes);
+await server.register(serviceRoutes);
 await server.register(githubRoutes);
 await server.register(extrasRoutes);
 await server.register(updateRoutes);
@@ -99,6 +102,9 @@ importLegacySettings(db.prepare('SELECT 1 FROM apps LIMIT 1').get() !== undefine
 
 if (await dockerAvailable()) {
   await ensureEdgeNetwork();
+  if (db.prepare("SELECT 1 FROM addons WHERE type = 'postgres-shared' LIMIT 1").get()) {
+    await ensurePostgres((msg) => server.log.info(msg)).catch((err) => server.log.warn(err.message));
+  }
   await loginRegistries().catch((err) => server.log.warn(err.message));
   await ensureConnector().catch((err) => server.log.warn(err.message));
   void trackDeployedImages().catch((err) => server.log.warn(err.message));

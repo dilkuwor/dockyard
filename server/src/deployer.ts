@@ -2,10 +2,11 @@ import { config } from './config.js';
 import { decrypt, randomId } from './crypto.js';
 import { db, type AppRow, type DeploymentRow } from './db.js';
 import { compose, writeComposeFile, writeEnvFile } from './docker.js';
-import { addonsOf } from './addons.js';
+import { addonServices, usesSharedPostgres } from './addons.js';
 import { getServiceImage, renderCompose, setServiceImage } from './compose.js';
 import { notFound } from './errors.js';
 import { trackImages } from './images.js';
+import { ensurePostgres, provisionDatabase } from './postgres.js';
 import { appAddress } from './site.js';
 
 const MAX_LOG = 200_000;
@@ -105,14 +106,22 @@ async function runDeployment(deploymentId: string): Promise<void> {
     if (deployment.image) log(`Image: ${deployment.image}`);
 
     const env = appEnv(app);
+    const shared = usesSharedPostgres(app);
+    if (shared) {
+      // Idempotent, so a database lost with the server's volume comes back (empty) rather than failing the deploy.
+      await ensurePostgres(log);
+      const database = await provisionDatabase(app.id);
+      log(`Database ${database.name} is ready on the shared Postgres server.`);
+    }
     const rendered = renderCompose(deployment.compose, {
       appId: app.id,
       slug: app.slug,
       primaryService: app.primary_service,
       port: app.port,
       env,
-      envSkip: addonsOf(app.id).map((a) => a.service),
+      envSkip: addonServices(app.id),
       edgeNetwork: config.edgeNetwork,
+      dataNetwork: shared ? config.dataNetwork : undefined,
       entrypoint: config.traefikEntrypoint,
     });
     writeComposeFile(app.id, rendered);

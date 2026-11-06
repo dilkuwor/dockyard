@@ -22,10 +22,12 @@ export interface DeploymentDiff {
   env: { added: string[]; removed: string[]; changed: string[] }
 }
 
-export type AddonType = 'postgres' | 'redis' | 'minio'
+export type AddonType = 'postgres-shared' | 'postgres' | 'redis' | 'minio'
 
 export interface AddonInfo {
   type: AddonType
+  /** A service in the app's compose file, or a database on Dockyard's shared Postgres server. */
+  kind: 'service' | 'shared'
   label: string
   service: string
   envKeys: string[]
@@ -128,6 +130,40 @@ export interface ContainerStats {
   cpu: string
   memory: string
   memoryPercent: string
+}
+
+export interface SharedService {
+  type: 'postgres'
+  label: string
+  container: string
+  description: string
+  /** missing: never started. stopped: exists but not running. */
+  state: 'running' | 'stopped' | 'missing'
+  status: string
+  health: string
+  image: string
+  version: string | null
+  dataSize: string | null
+  volume: string
+  network: string
+  host: string
+  /** Direct access: the port asked for, the one the running container really publishes, and the hostname this dashboard was reached through. */
+  accessPort: number | null
+  publishedPort: number | null
+  accessHost: string
+  /** The request came through Cloudflare, which does not carry Postgres traffic to that hostname. */
+  viaCloudflare: boolean
+  cpu: string
+  memory: string
+  memoryPercent: string
+  /** Apps with the add-on, whether or not their database exists yet. */
+  appCount: number
+  databases: {
+    name: string
+    size: string
+    /** Null when the app that owned the database is gone. */
+    app: { id: string; name: string; slug: string; previewOf: string | null; branch: string | null } | null
+  }[]
 }
 
 export interface PlatformHealth {
@@ -328,6 +364,15 @@ export const api = {
 
   stats: (id: string) => request<ContainerStats[]>('GET', `/api/apps/${id}/stats`),
   platformHealth: () => request<PlatformHealth>('GET', '/api/platform/health'),
+  services: () => request<{ checkedAt: number; services: SharedService[] }>('GET', '/api/services'),
+  serviceAction: (type: SharedService['type'], action: 'start' | 'stop' | 'restart') =>
+    request<{ ok: true }>('POST', `/api/services/${type}/actions/${action}`),
+  setServiceAccess: (type: SharedService['type'], port: number | null) =>
+    request<{ accessPort: number | null }>('PUT', `/api/services/${type}/access`, { port }),
+  serviceCredentials: (type: SharedService['type']) =>
+    request<{ user: string; password: string; host: string; port: number | null; url: string | null }>('GET', `/api/services/${type}/credentials`),
+  serviceLogs: (type: SharedService['type'], tail = 200) =>
+    fetch(`/api/services/${type}/logs?tail=${tail}`, { credentials: 'same-origin' }).then((r) => r.text()),
 
   unusedImages: () => request<{ images: UnusedImage[]; totalBytes: number }>('GET', '/api/images/unused'),
   pruneImages: () => request<{ removed: number; failed: number; bytes: number }>('POST', '/api/images/prune'),

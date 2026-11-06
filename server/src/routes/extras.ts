@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { ADDONS, addAddon, addonsOf, parseAddonType, removeAddon } from '../addons.js';
+import { ADDONS, addAddon, addonsOf, parseAddonType, removeAddon, sharedDatabaseName } from '../addons.js';
 import { db, type AppRow } from '../db.js';
 import { notFound } from '../errors.js';
 import { addHostname, hostnameDetails, removeHostname, setPrimaryHostname } from '../hostnames.js';
@@ -18,8 +18,9 @@ export async function extrasRoutes(app: FastifyInstance): Promise<void> {
     const added = new Map(addonsOf(row.id).map((a) => [a.type, a]));
     return Object.values(ADDONS).map((spec) => ({
       type: spec.type,
+      kind: spec.kind,
       label: spec.label,
-      service: spec.service,
+      service: spec.kind === 'shared' ? sharedDatabaseName(row.id) : spec.service,
       envKeys: spec.envKeys,
       note: spec.note,
       added: added.has(spec.type),
@@ -30,15 +31,24 @@ export async function extrasRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { id: string } }>('/api/apps/:id/addons', async (req, reply) => {
     const row = getApp(req.params.id);
     const type = parseAddonType((req.body as { type?: unknown } | undefined)?.type);
-    const result = addAddon(row, type);
+    const result = await addAddon(row, type);
     reply.code(201);
-    return { ok: true, type, envKeys: result.envKeys, note: 'Added to the compose file and environment. Deploy to start it.' };
+    const note = ADDONS[type].kind === 'shared'
+      ? `Database ${sharedDatabaseName(row.id)} created on the shared server and its variables put into the environment. Deploy to connect the app to it.`
+      : 'Added to the compose file and environment. Deploy to start it.';
+    return { ok: true, type, envKeys: result.envKeys, note };
   });
 
   app.delete<{ Params: { id: string; type: string } }>('/api/apps/:id/addons/:type', async (req) => {
     const row = getApp(req.params.id);
-    removeAddon(row, parseAddonType(req.params.type));
-    return { ok: true, note: 'Removed from the compose file and environment. Deploy to stop it. Its Docker volume is kept.' };
+    const type = parseAddonType(req.params.type);
+    await removeAddon(row, type);
+    return {
+      ok: true,
+      note: ADDONS[type].kind === 'shared'
+        ? 'The database was deleted and its variables removed from the environment. Deploy to detach the app from the server.'
+        : 'Removed from the compose file and environment. Deploy to stop it. Its Docker volume is kept.',
+    };
   });
 
   app.get<{ Params: { id: string } }>('/api/apps/:id/hostnames', async (req) => hostnameDetails(getApp(req.params.id).id));

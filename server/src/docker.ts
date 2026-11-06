@@ -295,15 +295,20 @@ export async function managedAppStorage(apps: ManagedAppStorageInput[]): Promise
   return [...totals.values()];
 }
 
-/** Resource and storage information for services in Dockyard's Compose project. */
+/**
+ * Resource and storage information for Dockyard's own services: the Compose project, plus the
+ * containers Dockyard runs itself (the tunnel connector and the shared Postgres server).
+ */
 export async function platformContainers(): Promise<PlatformContainer[]> {
-  const ps = await run([
-    'ps', '-a', '--filter', 'label=com.docker.compose.project=dockyard', '--format', '{{json .}}',
-  ]);
-  if (ps.code !== 0) throw new Error(`Could not list Dockyard services: ${lastLine(ps.stderr)}`);
-  const containers = parseJsonOutput(ps.stdout) as {
-    ID?: string; Names?: string; Image?: string; State?: string; Status?: string; Labels?: string;
-  }[];
+  type Row = { ID?: string; Names?: string; Image?: string; State?: string; Status?: string; Labels?: string };
+  const containers: Row[] = [];
+  for (const filter of ['label=com.docker.compose.project=dockyard', 'label=dockyard.role']) {
+    const ps = await run(['ps', '-a', '--filter', filter, '--format', '{{json .}}']);
+    if (ps.code !== 0) throw new Error(`Could not list Dockyard services: ${lastLine(ps.stderr)}`);
+    for (const row of parseJsonOutput(ps.stdout) as Row[]) {
+      if (!containers.some((c) => c.ID === row.ID)) containers.push(row);
+    }
+  }
   const running = containers.filter((container) => container.State === 'running' && container.ID);
   const statsResult = running.length
     ? await run(['stats', '--no-stream', '--format', '{{json .}}', ...running.map((container) => container.ID!)], { timeoutMs: 15_000 })

@@ -1,7 +1,9 @@
+import { previewEnv, usesSharedPostgres } from './addons.js';
 import { setServiceImage } from './compose.js';
 import { encrypt, newHookSecret, randomId } from './crypto.js';
 import { db, type AppRow } from './db.js';
 import { compose, removeAppDir } from './docker.js';
+import { dropDatabase } from './postgres.js';
 
 /**
  * Preview deployments: when an app has them turned on, a push to any branch other than its
@@ -34,29 +36,31 @@ export function findOrCreatePreview(parent: AppRow, branch: string, image: strin
   if (existing) {
     // Keep the preview in step with its parent: same compose shape and variables, new image.
     const composeText = setServiceImage(parent.compose, parent.primary_service, image);
+    const envEnc = previewEnv(parent, existing.id);
     db.prepare('UPDATE apps SET compose = ?, env_enc = ?, port = ?, primary_service = ?, domain = ?, updated_at = ? WHERE id = ?').run(
       composeText,
-      parent.env_enc,
+      envEnc,
       parent.port,
       parent.primary_service,
       parent.domain,
       Date.now(),
       existing.id,
     );
-    return { ...existing, compose: composeText, env_enc: parent.env_enc, port: parent.port, primary_service: parent.primary_service, domain: parent.domain };
+    return { ...existing, compose: composeText, env_enc: envEnc, port: parent.port, primary_service: parent.primary_service, domain: parent.domain };
   }
 
   const now = Date.now();
   const slug = uniqueSlug(`${parent.slug}-${branchSlug(branch, 62 - parent.slug.length)}`);
+  const id = randomId(10);
   const row: AppRow = {
-    id: randomId(10),
+    id,
     name: `${parent.name} (${branch})`.slice(0, 60),
     slug,
     source_type: parent.source_type,
     compose: setServiceImage(parent.compose, parent.primary_service, image),
     primary_service: parent.primary_service,
     port: parent.port,
-    env_enc: parent.env_enc,
+    env_enc: previewEnv(parent, id),
     hook_secret_enc: encrypt(newHookSecret()),
     current_deployment_id: null,
     domain: parent.domain,
@@ -82,6 +86,7 @@ export function findOrCreatePreview(parent: AppRow, branch: string, image: strin
 /** Stops and deletes a preview, including its volumes: previews hold nothing worth keeping. */
 export async function removePreviewApp(preview: AppRow): Promise<void> {
   await compose.down(preview.id, true);
+  if (usesSharedPostgres(preview)) await dropDatabase(preview.id);
   removeAppDir(preview.id);
   db.prepare('DELETE FROM apps WHERE id = ?').run(preview.id);
 }

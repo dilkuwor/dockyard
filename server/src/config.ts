@@ -32,6 +32,8 @@ export const config = {
   legacyDomain: process.env.BASE_DOMAIN,
   legacyTunnelToken: process.env.CLOUDFLARE_TUNNEL_TOKEN,
   edgeNetwork: process.env.EDGE_NETWORK ?? 'dockyard_edge',
+  // Apps with the shared Postgres add-on are joined to this network, where the server lives.
+  dataNetwork: process.env.DATA_NETWORK ?? 'dockyard_data',
   traefikEntrypoint: process.env.TRAEFIK_ENTRYPOINT ?? 'web',
   secret: required('DOCKYARD_SECRET'),
   // Optional since the password is chosen in the dashboard on first visit. Still honoured for older installs.

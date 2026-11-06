@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { addonsOf } from './addons.js';
+import { dumpDatabase, ensurePostgres, provisionDatabase, restoreDatabase } from './postgres.js';
 import { config } from './config.js';
 import { randomId } from './crypto.js';
 import { db, getSetting, setSetting, type AppRow } from './db.js';
@@ -170,10 +171,11 @@ export async function runBackup(kind: BackupRow['kind']): Promise<string> {
           db.prepare('INSERT INTO backup_items (backup_id, app_id, app_name, file, size, status, detail) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, app.id, app.name, file, size, status, detail);
         try {
           const volumes = await projectVolumes(app.id);
-          const postgres = addonsOf(app.id).find((a) => a.type === 'postgres');
+          const postgres = addonsOf(app.id).find((a) => a.type === 'postgres' || a.type === 'postgres-shared');
+          const shared = postgres?.type === 'postgres-shared';
           const pgVolume = volumes.find((v) => v.endsWith('_postgres-data'));
           const fileVolumes = volumes.filter((v) => v !== pgVolume);
-          if (volumes.length === 0) {
+          if (volumes.length === 0 && !shared) {
             item('empty', null, 0, 'No volumes: nothing to back up.');
             log(`${app.name}: no data volumes, skipped.`);
             continue;
@@ -190,8 +192,10 @@ export async function runBackup(kind: BackupRow['kind']): Promise<string> {
           fs.writeFileSync(path.join(appDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 
           if (postgres) {
-            const dump = await execToFile(app.id, postgres.service, ['pg_dump', '-U', 'app', '-d', 'app', '-Fc'], path.join(appDir, 'postgres.dump'));
-            if (dump.code !== 0) throw new Error(`pg_dump failed: ${dump.stderr.trim() || 'is the app running?'}`);
+            const dump = shared
+              ? await dumpDatabase(app.id, path.join(appDir, 'postgres.dump'))
+              : await execToFile(app.id, postgres.service, ['pg_dump', '-U', 'app', '-d', 'app', '-Fc'], path.join(appDir, 'postgres.dump'));
+            if (dump.code !== 0) throw new Error(`pg_dump failed: ${dump.stderr.trim() || (shared ? 'is the shared Postgres server running?' : 'is the app running?')}`);
           }
 
           if (fileVolumes.length) {
@@ -317,7 +321,14 @@ export async function restoreApp(app: AppRow, backupId: string, log: (line: stri
     const up = await compose.up(app.id, log);
     if (up.code !== 0) throw new Error('The app did not come back up. Check its logs.');
 
-    if (manifest.postgres && pgVolume) {
+    const shared = addonsOf(app.id).some((a) => a.type === 'postgres-shared');
+    if (manifest.postgres && shared) {
+      log('Loading the Postgres dump into the shared server.');
+      await ensurePostgres(log);
+      await provisionDatabase(app.id);
+      const res = await restoreDatabase(app.id, path.join(work, app.id, 'postgres.dump'));
+      if (res.code !== 0 && /error/i.test(res.stderr)) throw new Error(`pg_restore failed: ${res.stderr.trim().split('\n').slice(-3).join(' ')}`);
+    } else if (manifest.postgres && pgVolume) {
       const service = addonsOf(app.id).find((a) => a.type === 'postgres')?.service ?? 'postgres';
       log('Loading the Postgres dump.');
       const res = await fileToExec(app.id, service, ['pg_restore', '-U', 'app', '-d', 'app', '--clean', '--if-exists', '--no-owner'], path.join(work, app.id, 'postgres.dump'));
