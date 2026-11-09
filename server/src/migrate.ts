@@ -220,7 +220,7 @@ async function migrate(app: AppRow, m: Migration): Promise<void> {
       throw new Error('The app did not start on the shared server; see its Deployments tab for why.');
     }
 
-    log(`Done. The old Postgres container is gone; its volume ${projectName(app.id)}_postgres-data is kept as a fallback and can be removed later.`);
+    log(`Done. The old Postgres container is gone; its volume ${projectName(app.id)}_postgres-data is kept as a fallback; delete it under Storage Cleanup → Volumes once you are happy.`);
     m.status = 'succeeded';
   } catch (err) {
     m.error = (err as Error).message;

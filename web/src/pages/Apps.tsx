@@ -160,7 +160,7 @@ export default function AppsPage() {
           subtext={`${unusedData?.images.length ?? 0} unused image${(unusedData?.images.length ?? 0) === 1 ? '' : 's'}`}
           icon={<IconDatabase className="size-5" />}
           action={
-            <Link to="/images" className="inline-flex items-center gap-1.5 font-medium text-accent hover:underline">
+            <Link to="/storage" className="inline-flex items-center gap-1.5 font-medium text-accent hover:underline">
               Review and prune images
               <IconArrowRight className="size-3.5" />
             </Link>

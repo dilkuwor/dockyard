@@ -4,7 +4,8 @@ import { Button, Card, ErrorNote, MetricCard } from '../components/ui'
 import { IconImages, IconCheck } from '../components/Icons'
 import { formatBytes, shortImage, useResource } from '../lib'
 
-export default function ImagesPage() {
+/** Unused images: the Images tab of Storage Cleanup. */
+export default function ImagesPanel() {
   const { data, error, reload } = useResource(api.unusedImages, [])
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -34,13 +35,10 @@ export default function ImagesPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Image Cleanup</h1>
-        <p className="mt-1 text-sm text-ink-soft">
-          Review Docker images that are no longer used by any container and reclaim host disk space. If rolled back later, Dockyard will
-          re-pull the required image.
-        </p>
-      </div>
+      <p className="text-sm text-ink-soft">
+        Docker images Dockyard pulled that no container uses any more. Removing them is safe: if you roll back later, Dockyard pulls the
+        image again.
+      </p>
 
       <ErrorNote error={error} />
       <ErrorNote error={pruneError} />

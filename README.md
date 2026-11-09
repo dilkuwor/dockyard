@@ -39,7 +39,8 @@ GitHub Actions ── build & push ──▶ ghcr.io / Docker Hub
 - Updates itself from GitHub from the Settings page.
 - Pulls private images from Docker Hub, ghcr.io or any other registry.
 - Access tokens and a `dockyard` command, so scripts and AI agents can deploy.
-- Cleans up old images, and only the ones it pulled itself.
+- Storage cleanup: old images, and only the ones it pulled itself; app volumes nothing uses
+  any more, to download or delete one by one.
 
 | Service        | Job                                                                |
 | -------------- | ------------------------------------------------------------------ |

@@ -232,6 +232,19 @@ export interface UnusedImage {
   size: number
 }
 
+/** A Docker volume Dockyard made for an app that nothing uses any more. */
+export interface UnusedVolume {
+  name: string
+  size: number
+  createdAt: string | null
+  appId: string
+  /** Null when the app has been deleted. */
+  appName: string | null
+  key: string
+  reason: string
+  warning: string | null
+}
+
 export interface ApiToken {
   id: string
   name: string
@@ -413,6 +426,9 @@ export const api = {
     fetch(`/api/services/${type}/logs?tail=${tail}`, { credentials: 'same-origin' }).then((r) => r.text()),
 
   unusedImages: () => request<{ images: UnusedImage[]; totalBytes: number }>('GET', '/api/images/unused'),
+  unusedVolumes: () => request<{ volumes: UnusedVolume[]; totalBytes: number }>('GET', '/api/volumes/unused'),
+  deleteVolume: (name: string) => request<{ name: string; size: number }>('DELETE', `/api/volumes/${encodeURIComponent(name)}`, { confirm: name }),
+  volumeArchiveUrl: (name: string) => `/api/volumes/${encodeURIComponent(name)}/archive`,
   pruneImages: () => request<{ removed: number; failed: number; bytes: number }>('POST', '/api/images/prune'),
 
   tokens: () => request<ApiToken[]>('GET', '/api/tokens'),
