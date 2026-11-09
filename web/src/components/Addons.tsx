@@ -1,9 +1,75 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { api, type AddonType, type AppDetail } from '../api'
+import { api, type AddonType, type AppDetail, type PostgresMigration } from '../api'
 import { Button, ErrorNote } from './ui'
 import { IconCheck, IconDatabase } from './Icons'
 import { useResource } from '../lib'
+
+/**
+ * Moves the app's own Postgres to a database on the shared server, data included. It runs on the
+ * server; this follows its log until it finishes.
+ */
+function MoveToShared({ app, onDone }: { app: AppDetail; onDone: () => void }) {
+  const [migration, setMigration] = useState<PostgresMigration | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+
+  useEffect(() => {
+    api.postgresMigration(app.id).then((r) => setMigration(r.migration), () => undefined)
+  }, [app.id])
+
+  const running = migration?.status === 'running'
+  useEffect(() => {
+    if (!running) return
+    const timer = setInterval(async () => {
+      try {
+        const { migration: next } = await api.postgresMigration(app.id)
+        setMigration(next)
+        if (next && next.status !== 'running') onDone()
+      } catch {
+        // Try again on the next tick.
+      }
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [running, app.id, onDone])
+
+  async function start() {
+    setError(null)
+    setConfirming(false)
+    try {
+      setMigration(await api.migratePostgres(app.id))
+    } catch (err) {
+      setError(err)
+    }
+  }
+
+  return (
+    <div className="mt-2 space-y-2">
+      {!running &&
+        (confirming ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
+            <span>The app stops while its data is copied, then redeploys on the shared server. The old volume is kept.</span>
+            <Button size="sm" variant="accent" className="text-xs" onClick={start}>
+              Move now
+            </Button>
+            <Button size="sm" variant="quiet" className="text-xs" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" className="text-xs" onClick={() => setConfirming(true)}>
+            Move to shared server
+          </Button>
+        ))}
+      <ErrorNote error={error} />
+      {migration && (
+        <pre className="max-h-56 overflow-auto rounded-md border border-rule bg-ink p-2.5 font-mono text-[11px] leading-relaxed text-paper">
+          {migration.log.join('\n') || 'Starting…'}
+        </pre>
+      )}
+    </div>
+  )
+}
 
 /** Managed services added to an app's compose file, with their connection details in its environment. */
 export default function Addons({ app, onChange }: { app: AppDetail; onChange: () => void }) {
@@ -62,6 +128,7 @@ export default function Addons({ app, onChange }: { app: AppDetail; onChange: ()
                   {a.kind === 'shared' && a.added ? `${a.service} · ` : ''}
                   {a.envKeys.join(' · ')}
                 </p>
+                {a.type === 'postgres' && a.added && !app.previewOf && <MoveToShared app={app} onDone={() => { void reload(); onChange() }} />}
               </div>
             </div>
             <div className="flex items-center gap-2">

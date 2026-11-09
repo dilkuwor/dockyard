@@ -90,7 +90,7 @@ async function projectVolumes(appId: string): Promise<string[]> {
 }
 
 /** Streams `docker compose exec` output into a file, byte for byte (pg_dump output is binary). */
-function execToFile(appId: string, service: string, cmd: string[], file: string): Promise<{ code: number; stderr: string }> {
+export function execToFile(appId: string, service: string, cmd: string[], file: string): Promise<{ code: number; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn('docker', ['compose', '-p', projectName(appId), 'exec', '-T', service, ...cmd]);
     const out = fs.createWriteStream(file);

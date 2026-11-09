@@ -12,12 +12,14 @@ Usage: dockyard <command>
 Run inside the app's git repository (it must have a GitHub remote named origin).
 
   deploy [--name NAME] [--port PORT] [--address NAME] [--domain DOMAIN] [--branch BRANCH]
-         [--previews | --no-previews] [--no-push] [--no-wait] [--reset-secret]
+         [--addon TYPE]... [--previews | --no-previews] [--no-push] [--no-wait] [--reset-secret]
       Registers the app on Dockyard if it is new (needs --port), adds
       .github/workflows/dockyard.yml, pushes, and waits until the app is live.
       Safe to run again: later runs update and redeploy the same app.
       --domain picks which of the server's public domains the app lives under
       (see `dockyard guide`); without it, the server's default domain is used.
+      --addon adds a managed add-on before the build, so the first deploy already
+      has it (see `dockyard addon`). Repeat it for several; ones already added are kept.
       --previews turns on preview deployments: every other branch pushed to GitHub
       gets its own address, <address>-<branch>.<domain>, removed when the branch is
       deleted. The workflow is rewritten to build on every branch.
@@ -31,6 +33,17 @@ Run inside the app's git repository (it must have a GitHub remote named origin).
   env [KEY=VALUE ...]
       Set environment variables (merged with the existing ones). With no arguments,
       lists the variable names. Run `dockyard redeploy` afterwards to apply them.
+  addon [add|remove TYPE]
+      With no arguments, lists the add-ons and which are added. TYPE is one of:
+        postgres-shared  a database of the app's own on Dockyard's shared Postgres server
+                         (preferred for Postgres; DATABASE_URL, PGHOST, PGPORT, PGUSER,
+                         PGPASSWORD, PGDATABASE)
+        postgres         a Postgres server inside the app (same variables)
+        redis            Redis inside the app (REDIS_URL)
+        minio            S3-compatible storage inside the app (S3_ENDPOINT, S3_ACCESS_KEY,
+                         S3_SECRET_KEY, S3_REGION, S3_FORCE_PATH_STYLE)
+      The variables go into the app's environment. Run `dockyard redeploy` afterwards.
+      remove deletes a postgres-shared database with all its data.
   redeploy        Deploy the current image again, e.g. after changing variables.
   logs [LINES]    Print the app's recent container logs (default 100 lines).
   guide           Print this server's deployment guide for agents.
@@ -259,6 +272,7 @@ wait_for_deploy() {
 
 cmd_deploy() {
   local name="" port="" address="" domain="" branch="" push=1 wait=1 reset_secret=false previews=""
+  local -a addons=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --name) name=${2-}; shift 2 ;;
@@ -271,6 +285,7 @@ cmd_deploy() {
       --reset-secret) reset_secret=true; shift ;;
       --previews) previews=true; shift ;;
       --no-previews) previews=false; shift ;;
+      --addon) addons+=("${2-}"); shift 2 ;;
       *) die "unknown option for deploy: $1" ;;
     esac
   done
@@ -302,6 +317,10 @@ cmd_deploy() {
     fi
   fi
   previews_on=$(api GET "/api/apps/$app" | jq -r '.previewsEnabled // false')
+  local addon
+  for addon in ${addons[@]+"${addons[@]}"}; do
+    ensure_addon "$app" "$addon" || exit 1
+  done
 
   repo=${image#ghcr.io/}
   meta=$(api GET /api/meta) || exit 1
@@ -429,6 +448,44 @@ cmd_logs() {
   api GET "/api/apps/$app/logs?tail=${1:-100}"
 }
 
+# Adds the add-on to the app unless it is there already. Prints what happened.
+ensure_addon() {
+  local app=$1 type=$2 list result
+  list=$(api GET "/api/apps/$app/addons") || return 1
+  printf '%s' "$list" | jq -e --arg t "$type" 'any(.[]; .type == $t)' >/dev/null \
+    || die "unknown add-on \"$type\". Choose one of: $(printf '%s' "$list" | jq -r 'map(.type) | join(", ")')"
+  if printf '%s' "$list" | jq -e --arg t "$type" 'any(.[]; .type == $t and .added)' >/dev/null; then
+    echo "Add-on $type is already added."
+    return 0
+  fi
+  result=$(api POST "/api/apps/$app/addons" "$(jq -nc --arg t "$type" '{type: $t}')") || return 1
+  echo "Added $type: $(printf '%s' "$result" | jq -r '.envKeys | join(", ")') are in the app's environment."
+}
+
+cmd_addon() {
+  require_config
+  repo_root >/dev/null
+  local app action=${1-} type=${2-} result
+  app=$(current_app) || exit 1
+  case "$action" in
+    "")
+      api GET "/api/apps/$app/addons" | jq -r '.[] | "\(if .added then "[added]" else "       " end) \(.type)\t\(.label)\n          \(.envKeys | join(", "))"'
+      ;;
+    add)
+      [ -n "$type" ] || die "usage: dockyard addon add TYPE"
+      ensure_addon "$app" "$type" || exit 1
+      echo "Run: dockyard redeploy"
+      ;;
+    remove)
+      [ -n "$type" ] || die "usage: dockyard addon remove TYPE"
+      result=$(api DELETE "/api/apps/$app/addons/$type") || exit 1
+      printf '%s' "$result" | jq -r .note
+      echo "Run: dockyard redeploy"
+      ;;
+    *) die "usage: dockyard addon [add|remove TYPE]" ;;
+  esac
+}
+
 cmd_guide() {
   require_config
   api GET /api/agent/guide
@@ -440,6 +497,7 @@ case "$command" in
   deploy) cmd_deploy "$@" ;;
   status) cmd_status ;;
   env) cmd_env "$@" ;;
+  addon|addons) cmd_addon "$@" ;;
   redeploy) cmd_redeploy ;;
   logs) cmd_logs "$@" ;;
   guide) cmd_guide ;;

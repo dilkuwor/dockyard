@@ -227,6 +227,58 @@ export async function removeAddon(app: AppRow, type: AddonType): Promise<void> {
   })();
 }
 
+/** What a switch to the shared server changes, so a failed switch can be put back exactly. */
+export interface AddonSnapshot {
+  compose: string;
+  envEnc: string | null;
+  rows: AddonRow[];
+}
+
+/**
+ * Moves the app's settings from the dedicated Postgres add-on to the shared one: the postgres
+ * service and its volume entry leave the compose file (the Docker volume itself is kept, with the
+ * old data), anything that depended on that service stops doing so, and the variables point at
+ * the app's database on the shared server. Returns what was there before.
+ */
+export function switchToSharedPostgres(app: AppRow): AddonSnapshot {
+  const before: AddonSnapshot = { compose: app.compose, envEnc: app.env_enc, rows: addonsOf(app.id) };
+  const row = before.rows.find((a) => a.type === 'postgres');
+  if (!row) throw badRequest('This app has no dedicated Postgres add-on.');
+  const doc = parseCompose(app.compose) as Record<string, unknown> & { services: Record<string, Record<string, unknown>>; volumes?: Record<string, unknown> };
+  delete doc.services[row.service];
+  for (const service of Object.values(doc.services)) {
+    const deps = service.depends_on;
+    if (Array.isArray(deps)) {
+      const kept = deps.filter((d) => d !== row.service);
+      if (kept.length) service.depends_on = kept;
+      else delete service.depends_on;
+    } else if (deps && typeof deps === 'object') {
+      delete (deps as Record<string, unknown>)[row.service];
+      if (Object.keys(deps).length === 0) delete service.depends_on;
+    }
+  }
+  if (doc.volumes) {
+    delete doc.volumes[ADDONS.postgres.volume!];
+    if (Object.keys(doc.volumes).length === 0) delete doc.volumes;
+  }
+  const vars = withAddonEnv(readEnv(app), ADDONS['postgres-shared'], sharedDatabaseEnv(app.id));
+  db.transaction(() => {
+    db.prepare('UPDATE apps SET compose = ?, env_enc = ?, updated_at = ? WHERE id = ?').run(YAML.stringify(doc), writeEnv(vars), Date.now(), app.id);
+    db.prepare("DELETE FROM addons WHERE app_id = ? AND type = 'postgres'").run(app.id);
+    db.prepare('INSERT INTO addons (app_id, type, service, created_at) VALUES (?, ?, ?, ?)').run(app.id, 'postgres-shared', sharedDatabase(app.id).name, Date.now());
+  })();
+  return before;
+}
+
+export function restoreAddonSnapshot(appId: string, snapshot: AddonSnapshot): void {
+  db.transaction(() => {
+    db.prepare('UPDATE apps SET compose = ?, env_enc = ?, updated_at = ? WHERE id = ?').run(snapshot.compose, snapshot.envEnc, Date.now(), appId);
+    db.prepare('DELETE FROM addons WHERE app_id = ?').run(appId);
+    const insert = db.prepare('INSERT INTO addons (app_id, type, service, created_at) VALUES (?, ?, ?, ?)');
+    for (const r of snapshot.rows) insert.run(r.app_id, r.type, r.service, r.created_at);
+  })();
+}
+
 /**
  * The environment a preview of this app should run with: the parent's, except that a preview of
  * an app on the shared Postgres server gets the variables for a database of its own.

@@ -75,6 +75,8 @@ The `dockyard` command below sets all of this up in one step.
    - `--domain` is optional: which of the server's public domains the app lives under.
      `GET /api/meta` lists them in `domains` and the one used without the flag in
      `defaultDomain`. Only pass it when the user asks for a specific domain.
+   - `--addon postgres-shared` gives the app a database before its first start; see
+     "Databases, caches and storage" below. Add it whenever the app needs Postgres.
    - `--previews` turns on preview deployments: every other branch gets its own
      address `<address>-<branch>.<domain>`, removed when the branch is deleted. The
      workflow is written to build every branch. Only use it when the user asks.
@@ -100,6 +102,42 @@ The `dockyard` command below sets all of this up in one step.
 
 After this, every push to the deploy branch redeploys the app automatically.
 
+## Databases, caches and storage
+
+Do not run a database yourself or point the app at an outside one unless the user asks.
+Dockyard manages them as add-ons and puts the connection details into the app's
+environment:
+
+| Add-on | What the app gets | Variables |
+| --- | --- | --- |
+| `postgres-shared` | A database and role of its own on the Postgres 18 server Dockyard runs for all apps (host `dockyard-postgres`). **The default choice for Postgres.** | `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` |
+| `postgres` | A Postgres 18 server inside the app (host `postgres`), for apps that need their own version or extensions | the same |
+| `redis` | Redis 7 inside the app (host `redis`) | `REDIS_URL` |
+| `minio` | S3-compatible storage inside the app (`http://minio:9000`); create buckets from the app | `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION`, `S3_FORCE_PATH_STYLE` |
+
+- **Add it with the first deploy**, so the app has its database the first time it starts:
+  `dockyard deploy --name "My App" --port 3000 --addon postgres-shared` (repeat
+  `--addon` for more). For an app that is already deployed: `dockyard addon add redis`,
+  then `dockyard redeploy`. `dockyard addon` lists what is added.
+- **Read the connection from the environment.** Use `DATABASE_URL` (or the `PG*`
+  variables) at runtime; never hard-code it, put it in the image, or set those variable
+  names yourself with `dockyard env`. Two add-ons that provide the same variables cannot
+  be added together.
+- **Create the schema from the app.** Nobody can run commands inside the container, so run
+  migrations when the app starts (for example `prisma migrate deploy`, `alembic upgrade
+  head` or `rails db:migrate` before the server process).
+- The shared server has TLS on with its own self-signed certificate, and the
+  `DATABASE_URL` leaves `sslmode` out. Do not add `sslmode=verify-full` or a CA check;
+  inside Dockyard the connection never leaves the machine.
+- Preview deployments get their own empty database on the shared server.
+- `dockyard addon remove postgres-shared` **deletes the database and all its data**; ask
+  the user first. Removing a service add-on keeps its Docker volume.
+- If the user wants to look at the data with pgAdmin, psql or an IDE, point them to the
+  dashboard's **Shared Services** page: **Remote access with Tailscale** reaches the
+  server from any of their devices, even when Dockyard is behind Cloudflare, and
+  **Direct access** publishes it on a port of the machine. Only the user can turn these
+  on and see the superuser password; API tokens cannot.
+
 ## If something fails
 
 - **It times out, or the workflow's last step fails with 401 "Invalid signature"**:
@@ -123,8 +161,9 @@ After this, every push to the deploy branch redeploys the app automatically.
 
 ## Limits
 
-- One image per app through this command. Apps that need several services (for
-  example a database) are created as a compose file through the API or dashboard.
+- One image per app through this command. A database, Redis or S3 storage comes from
+  an add-on (see above); apps that need other extra services are created as a compose
+  file through the API or dashboard.
 - Dockyard rejects compose files that use `build`, `ports`, `privileged`, bind mounts,
   host networking or `traefik.*` labels. Use images and named volumes.
 - Only HTTP on a single port is routed. HTTPS is added in front by Dockyard's proxy.
@@ -151,7 +190,7 @@ Every request needs `Authorization: Bearer $DOCKYARD_TOKEN`. Bodies and response
 | `GET /api/deployments/:id/diff` | What changed since the previous deployment: image, compose file, variable names |
 | `GET /api/apps/:id/previews` | Preview apps created from this app's branches |
 | `GET` / `POST /api/apps/:id/addons` | Managed add-ons: `{type: "postgres-shared" \| "postgres" \| "redis" \| "minio"}` adds it and its variables; `DELETE /api/apps/:id/addons/:type` removes them. Deploy afterwards. Prefer `postgres-shared` (a database on Dockyard's shared server) over `postgres` (a server inside the app); removing `postgres-shared` deletes its database, so ask the user first |
-| `GET /api/services` | The shared servers Dockyard runs (Postgres so far): state, version, data size and each database with the app that owns it |
+| `GET /api/services` | The shared servers Dockyard runs (Postgres so far): state, version, data size, each database with the app that owns it, and whether remote access over Tailscale is on (`remote`) |
 | `GET` / `POST /api/apps/:id/hostnames` | Custom hostnames: `{hostname: "www.example.com"}` routes it to the app (Cloudflare changes included); `DELETE /api/apps/:id/hostnames/:hostname` removes it. Takes effect without a deploy |
 | `PUT /api/apps/:id/primary-hostname` | `{hostname, redirect}`: present the app at that custom hostname (`url` changes), optionally redirecting its other addresses there; `{hostname: null}` goes back to the slug address |
 | `POST /api/apps/:id/github-secrets` | `{repo: "owner/name", reset?: boolean}`: store the hook secret in that GitHub repository with Dockyard's token. Answers `{configured: false}` without a token; otherwise `{secrets: {NAME: "added" \| "present" \| "updated"}}`. The repository must be the one the app's ghcr.io image is built from |

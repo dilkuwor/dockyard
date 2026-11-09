@@ -24,6 +24,19 @@ export interface DeploymentDiff {
 
 export type AddonType = 'postgres-shared' | 'postgres' | 'redis' | 'minio'
 
+/** Moving an app from its dedicated Postgres to the shared server, data included. */
+export interface PostgresMigration {
+  appId: string
+  appName: string
+  status: 'running' | 'succeeded' | 'failed'
+  startedAt: number
+  finishedAt: number | null
+  log: string[]
+  tables: number | null
+  rows: number | null
+  error: string | null
+}
+
 export interface AddonInfo {
   type: AddonType
   /** A service in the app's compose file, or a database on Dockyard's shared Postgres server. */
@@ -350,6 +363,8 @@ export const api = {
   previews: (id: string) => request<AppSummary[]>('GET', `/api/apps/${id}/previews`),
   addons: (id: string) => request<AddonInfo[]>('GET', `/api/apps/${id}/addons`),
   addAddon: (id: string, type: AddonType) => request<{ ok: true; envKeys: string[]; note: string }>('POST', `/api/apps/${id}/addons`, { type }),
+  migratePostgres: (id: string) => request<PostgresMigration>('POST', `/api/apps/${id}/addons/postgres/migrate`),
+  postgresMigration: (id: string) => request<{ migration: PostgresMigration | null }>('GET', `/api/apps/${id}/addons/postgres/migrate`),
   removeAddon: (id: string, type: AddonType) => request<{ ok: true; note: string }>('DELETE', `/api/apps/${id}/addons/${type}`),
   hostnames: (id: string) => request<HostnameInfo[]>('GET', `/api/apps/${id}/hostnames`),
   addHostname: (id: string, hostname: string) =>

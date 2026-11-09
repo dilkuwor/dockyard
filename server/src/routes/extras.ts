@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { ADDONS, addAddon, addonsOf, parseAddonType, removeAddon, sharedDatabaseName } from '../addons.js';
 import { db, type AppRow } from '../db.js';
 import { notFound } from '../errors.js';
+import { migrationOf, startMigration } from '../migrate.js';
 import { addHostname, hostnameDetails, removeHostname, setPrimaryHostname } from '../hostnames.js';
 
 function getApp(id: string): AppRow {
@@ -49,6 +50,20 @@ export async function extrasRoutes(app: FastifyInstance): Promise<void> {
         ? 'The database was deleted and its variables removed from the environment. Deploy to detach the app from the server.'
         : 'Removed from the compose file and environment. Deploy to stop it. Its Docker volume is kept.',
     };
+  });
+
+  /**
+   * Moves the app from its dedicated Postgres add-on to a database on the shared server, data
+   * included. Runs in the background (stops the app for the copy, then redeploys); poll the GET.
+   */
+  app.post<{ Params: { id: string } }>('/api/apps/:id/addons/postgres/migrate', async (req, reply) => {
+    reply.code(202);
+    return startMigration(getApp(req.params.id));
+  });
+
+  app.get<{ Params: { id: string } }>('/api/apps/:id/addons/postgres/migrate', async (req) => {
+    getApp(req.params.id);
+    return { migration: migrationOf(req.params.id) };
   });
 
   app.get<{ Params: { id: string } }>('/api/apps/:id/hostnames', async (req) => hostnameDetails(getApp(req.params.id).id));

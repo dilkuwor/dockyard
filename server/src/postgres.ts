@@ -243,6 +243,13 @@ export async function provisionDatabase(appId: string): Promise<SharedDatabase> 
   return d;
 }
 
+/** Runs a query as the superuser in one database and returns psql's unaligned output. */
+export async function queryShared(database: string, sql: string): Promise<string> {
+  const res = await run(['exec', POSTGRES_CONTAINER, 'psql', '-U', SUPERUSER, '-d', database, '-v', 'ON_ERROR_STOP=1', '-At', '-c', sql], { timeoutMs: 300_000 });
+  if (res.code !== 0) throw new Error(`Postgres refused: ${lastLine(res.stderr)}`);
+  return res.stdout;
+}
+
 /** Deletes the app's database and role, connections included. Nothing happens when the server is not running. */
 export async function dropDatabase(appId: string): Promise<void> {
   if ((await postgresState()) !== 'running') return;
