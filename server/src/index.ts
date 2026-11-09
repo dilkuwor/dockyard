@@ -8,6 +8,7 @@ import { ensureConnector, importLegacySettings } from './cloudflare.js';
 import { db, recoverInterruptedDeployments } from './db.js';
 import { dockerAvailable, ensureEdgeNetwork } from './docker.js';
 import { ensurePostgres } from './postgres.js';
+import { ensureRemote } from './tailscale.js';
 import { HttpError } from './errors.js';
 import { trackDeployedImages } from './images.js';
 import { loginRegistries } from './registries.js';
@@ -105,6 +106,7 @@ if (await dockerAvailable()) {
   if (db.prepare("SELECT 1 FROM addons WHERE type = 'postgres-shared' LIMIT 1").get()) {
     await ensurePostgres((msg) => server.log.info(msg)).catch((err) => server.log.warn(err.message));
   }
+  await ensureRemote().catch((err) => server.log.warn(err.message));
   await loginRegistries().catch((err) => server.log.warn(err.message));
   await ensureConnector().catch((err) => server.log.warn(err.message));
   void trackDeployedImages().catch((err) => server.log.warn(err.message));

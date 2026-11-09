@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { api, type SharedService } from '../api'
+import { api, type RemoteAccess as RemoteStatus, type SharedService } from '../api'
 import { Button, Card, CopyIconButton, ErrorNote, MetricCard, ProgressBar, TextInput } from '../components/ui'
-import { IconDatabase, IconEye, IconEyeOff, IconPlay, IconRotateCw, IconSquare, IconTerminal } from '../components/Icons'
+import { IconDatabase, IconExternalLink, IconEye, IconEyeOff, IconPlay, IconRotateCw, IconSquare, IconTerminal } from '../components/Icons'
 import { timeAgo, useResource } from '../lib'
 
 function stateTone(state: SharedService['state'], health: string): string {
@@ -100,7 +100,8 @@ function DirectAccess({ service, onChange }: { service: SharedService; onChange:
             <p role="status" className="rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-ink">
               You reached this dashboard through Cloudflare, which carries web traffic only, so{' '}
               <span className="font-mono">{service.accessHost}</span> will not answer on port {service.accessPort}. Use a hostname whose DNS record
-              points straight at this machine (a DNS-only record, not proxied), or its IP address, and open the port in its firewall.
+              points straight at this machine (a DNS-only record, not proxied), or its IP address, and open the port in its firewall. Remote
+              access with Tailscale, above, works without either.
             </p>
           )}
           <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
@@ -139,6 +140,283 @@ function DirectAccess({ service, onChange }: { service: SharedService; onChange:
             The host is the name you opened this dashboard with; any other name or address that reaches this machine works as well. Apps keep
             using <span className="font-mono">{service.host}</span> on the private network.
           </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const TAILSCALE_DOWNLOAD = 'https://tailscale.com/download'
+const TAILSCALE_MACHINES = 'https://login.tailscale.com/admin/machines'
+const TAILSCALE_USERS = 'https://login.tailscale.com/admin/users'
+
+function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-medium text-accent hover:underline">
+      {children}
+      <IconExternalLink className="size-3" />
+    </a>
+  )
+}
+
+/**
+ * Remote access over Tailscale: Dockyard runs a Tailscale node next to the server that forwards
+ * port 5432 of its tailnet address to it. Turning it on needs nothing but a sign-in at the link
+ * Tailscale hands out, with whatever identity provider the user already uses there.
+ */
+function RemoteAccess({ service, onChange }: { service: SharedService; onChange: () => void }) {
+  const [status, setStatus] = useState<RemoteStatus>(service.remote)
+  const [busy, setBusy] = useState<'on' | 'off' | null>(null)
+  const [error, setError] = useState<unknown>(null)
+  const [useKey, setUseKey] = useState(false)
+  const [authKey, setAuthKey] = useState('')
+  const [confirmOff, setConfirmOff] = useState(false)
+  const [credentials, setCredentials] = useState<{ password: string } | null>(null)
+  const [reveal, setReveal] = useState(false)
+
+  // The overview leaves out the login link; the session-only route has it.
+  const waiting = status.state === 'starting' || status.state === 'needs-login' || status.state === 'needs-approval'
+  useEffect(() => {
+    if (!service.remote.enabled) {
+      setStatus(service.remote)
+      return
+    }
+    let cancelled = false
+    api.serviceRemote(service.type).then((s) => !cancelled && setStatus(s), () => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [service.remote.enabled, service.remote.state, service.type])
+
+  // While someone signs in on Tailscale's page, look every few seconds for the node to come up.
+  useEffect(() => {
+    if (!waiting || busy) return
+    const timer = setInterval(async () => {
+      try {
+        const next = await api.serviceRemote(service.type)
+        setStatus(next)
+        if (next.state === 'connected') onChange()
+      } catch {
+        // A blip; the next tick tries again.
+      }
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [waiting, busy, service.type, onChange])
+
+  async function turnOn() {
+    setBusy('on')
+    setError(null)
+    try {
+      const next = await api.setServiceRemote(service.type, true, useKey ? authKey.trim() : undefined)
+      setStatus(next)
+      setAuthKey('')
+      if (next.error) setError(new Error(next.error))
+      if (next.state === 'needs-login' && next.loginUrl) window.open(next.loginUrl, '_blank', 'noopener')
+      onChange()
+    } catch (err) {
+      setError(err)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function turnOff() {
+    setBusy('off')
+    setError(null)
+    setConfirmOff(false)
+    try {
+      setStatus(await api.setServiceRemote(service.type, false))
+      setCredentials(null)
+      onChange()
+    } catch (err) {
+      setError(err)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function show() {
+    setError(null)
+    try {
+      setCredentials(await api.serviceCredentials(service.type))
+      setReveal(false)
+    } catch (err) {
+      setError(err)
+    }
+  }
+
+  const host = status.dnsName ?? status.ips[0] ?? ''
+  const address = `${host}:5432`
+  const url = credentials ? `postgres://postgres:${encodeURIComponent(credentials.password)}@${address}/postgres?sslmode=require` : ''
+
+  return (
+    <div className="space-y-3 rounded-lg border border-rule p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="max-w-2xl">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
+            Remote access with Tailscale
+            {status.state === 'connected' && <span className="rounded-full bg-starboard/10 px-2 py-0.5 text-[11px] font-medium text-starboard">Connected</span>}
+          </h3>
+          <p className="mt-0.5 text-xs text-ink-soft">
+            Reach the server from your laptop or a teammate's, from anywhere, even when this dashboard is behind Cloudflare. Dockyard puts it on
+            your private Tailscale network; no ports are opened on this machine or your router, and only devices you let into the tailnet can
+            connect.
+          </p>
+        </div>
+        {status.enabled ? (
+          confirmOff ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-ink-soft">Remove it from your tailnet?</span>
+              <Button size="sm" variant="danger" className="text-xs" busy={busy === 'off'} onClick={turnOff}>
+                Turn off
+              </Button>
+              <Button size="sm" variant="quiet" className="text-xs" onClick={() => setConfirmOff(false)}>
+                Keep
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="quiet" className="text-xs text-port hover:bg-port/10" onClick={() => setConfirmOff(true)}>
+              Turn off
+            </Button>
+          )
+        ) : (
+          <Button size="sm" variant="accent" className="text-xs" busy={busy === 'on'} disabled={useKey && !authKey.trim()} onClick={turnOn}>
+            {useKey ? 'Connect with key' : 'Connect with Tailscale'}
+          </Button>
+        )}
+      </div>
+
+      <ErrorNote error={error} />
+
+      {!status.enabled && (
+        <div className="space-y-2 text-xs text-ink-soft">
+          <p>
+            You will be sent to Tailscale to sign in with Google, Microsoft, GitHub, Apple or your company's SSO. No Tailscale account yet? It
+            is made on the spot, and free for personal use.
+          </p>
+          {useKey ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <TextInput
+                aria-label="Tailscale auth key"
+                type="password"
+                placeholder="tskey-auth-…"
+                value={authKey}
+                onChange={(e) => setAuthKey(e.target.value)}
+                className="w-80 max-w-full font-mono text-xs"
+              />
+              <button type="button" className="text-accent hover:underline" onClick={() => setUseKey(false)}>
+                Sign in instead
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="text-accent hover:underline" onClick={() => setUseKey(true)}>
+              Use an auth key instead
+            </button>
+          )}
+          {useKey && (
+            <p>
+              Make one under <ExternalLink href="https://login.tailscale.com/admin/settings/keys">Settings → Keys</ExternalLink>. A
+              reusable or one-off key both work; the key is used once and not stored.
+            </p>
+          )}
+        </div>
+      )}
+
+      {status.enabled && status.state === 'starting' && (
+        <p role="status" className="flex items-center gap-2 text-xs text-ink-soft">
+          <span aria-hidden className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          Starting Tailscale…
+        </p>
+      )}
+
+      {status.enabled && status.state === 'needs-login' && (
+        <div role="status" className="space-y-2 rounded-md border border-accent/30 bg-accent/5 px-3 py-3 text-xs text-ink">
+          <p className="font-medium">Sign in to Tailscale to finish.</p>
+          <p className="text-ink-soft">
+            Use the account whose tailnet should reach the database. This page notices by itself when you are done.
+          </p>
+          {status.loginUrl && (
+            <a href={status.loginUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 font-medium text-white hover:bg-accent-deep">
+              Sign in to Tailscale <IconExternalLink className="size-3.5" />
+            </a>
+          )}
+        </div>
+      )}
+
+      {status.enabled && status.state === 'needs-approval' && (
+        <p role="status" className="rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-xs text-ink">
+          Signed in{status.tailnet ? ` to ${status.tailnet}` : ''}, but your tailnet requires new devices to be approved. Approve{' '}
+          <span className="font-mono">dockyard-postgres</span> under <ExternalLink href={TAILSCALE_MACHINES}>Machines</ExternalLink>.
+        </p>
+      )}
+
+      {status.enabled && (status.state === 'stopped' || status.state === 'error') && (
+        <div role="status" className="flex flex-wrap items-center gap-2 rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-xs text-ink">
+          <span>{status.error ?? 'The Tailscale container is stopped.'}</span>
+          <Button size="sm" className="text-xs" busy={busy === 'on'} onClick={turnOn}>
+            Start it
+          </Button>
+        </div>
+      )}
+
+      {status.enabled && status.state === 'connected' && (
+        <div className="space-y-3 text-xs">
+          <dl className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+            <div className="flex items-center gap-2 sm:col-span-2">
+              <dt className="w-20 shrink-0 text-ink-soft">Host</dt>
+              <dd className="flex min-w-0 items-center gap-1 font-mono text-ink">
+                <span className="truncate">{address}</span>
+                <CopyIconButton value={address} label="Copy host and port" />
+                {status.ips[0] && host !== status.ips[0] && <span className="text-ink-soft">({status.ips[0]})</span>}
+              </dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-20 shrink-0 text-ink-soft">User</dt>
+              <dd className="font-mono text-ink">postgres</dd>
+            </div>
+            {status.tailnet && (
+              <div className="flex gap-2">
+                <dt className="w-20 shrink-0 text-ink-soft">Tailnet</dt>
+                <dd className="truncate font-mono text-ink">{status.tailnet}</dd>
+              </div>
+            )}
+            <div className="flex items-center gap-2 sm:col-span-2">
+              <dt className="w-20 shrink-0 text-ink-soft">Password</dt>
+              <dd className="flex items-center gap-1 font-mono text-ink">
+                {credentials ? (
+                  <>
+                    <span>{reveal ? credentials.password : '•'.repeat(16)}</span>
+                    <button type="button" aria-label={reveal ? 'Hide password' : 'Show password'} onClick={() => setReveal((v) => !v)} className="inline-flex size-7 items-center justify-center rounded-md text-ink-soft hover:bg-ink/8 hover:text-ink">
+                      {reveal ? <IconEyeOff className="size-3.5" /> : <IconEye className="size-3.5" />}
+                    </button>
+                    <CopyIconButton value={credentials.password} label="Copy password" />
+                    <CopyIconButton value={url} label="Copy connection URL" />
+                  </>
+                ) : (
+                  <Button size="sm" variant="quiet" className="text-xs" onClick={show}>
+                    Show credentials
+                  </Button>
+                )}
+              </dd>
+            </div>
+          </dl>
+          <ol className="list-decimal space-y-1 pl-4 text-ink-soft">
+            <li>
+              Install Tailscale on the computer you connect from (<ExternalLink href={TAILSCALE_DOWNLOAD}>download</ExternalLink>) and sign in with
+              the same account. Teammates can be <ExternalLink href={TAILSCALE_USERS}>invited to the tailnet</ExternalLink>.
+            </li>
+            <li>
+              Point pgAdmin, psql, DBeaver or your IDE at <span className="font-mono text-ink">{address}</span> with{' '}
+              <span className="font-mono">sslmode=require</span>. An app's own database user from its environment works too.
+            </li>
+          </ol>
+          {status.keyExpiry && (
+            <p className="text-ink-soft">
+              Tailscale signs this device out on {new Date(status.keyExpiry).toLocaleDateString()}. To keep it connected, open{' '}
+              <ExternalLink href={TAILSCALE_MACHINES}>Machines</ExternalLink>, choose <span className="font-mono">dockyard-postgres</span> and pick{' '}
+              <span className="font-medium text-ink">Disable key expiry</span>.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -283,6 +561,8 @@ function ServiceCard({ service, onChange }: { service: SharedService; onChange: 
               <dd className="truncate font-mono text-ink" title={service.image}>{service.image}</dd>
             </div>
           </dl>
+
+          <RemoteAccess service={service} onChange={onChange} />
 
           <DirectAccess service={service} onChange={onChange} />
 

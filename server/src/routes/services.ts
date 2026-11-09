@@ -3,6 +3,7 @@ import { db } from '../db.js';
 import { containerStats } from '../docker.js';
 import { HttpError, badRequest, notFound } from '../errors.js';
 import { POSTGRES_CONTAINER, accessPort, postgresAction, postgresInfo, postgresLogs, setAccessPort, sharedDatabase, superuserCredentials } from '../postgres.js';
+import { disableRemote, enableRemote, remoteAccess, remoteAccessSummary } from '../tailscale.js';
 
 /**
  * Shared services: infrastructure Dockyard runs once for every app that asks, as opposed to
@@ -10,7 +11,7 @@ import { POSTGRES_CONTAINER, accessPort, postgresAction, postgresInfo, postgresL
  */
 export async function serviceRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/services', async (req) => {
-    const info = await postgresInfo();
+    const [info, remote] = await Promise.all([postgresInfo(), remoteAccessSummary()]);
     // The name the dashboard was reached through points at this machine, so a published port is reachable there too,
     // unless the request came through Cloudflare's proxy or tunnel, which carry web traffic only.
     const host = req.hostname;
@@ -46,6 +47,8 @@ export async function serviceRoutes(app: FastifyInstance): Promise<void> {
           publishedPort: info.publishedPort,
           accessHost: host,
           viaCloudflare,
+          // Remote access over Tailscale; the login link is only on the session-only route below.
+          remote,
           cpu: stats?.cpu ?? '',
           memory: stats?.memory ?? '',
           memoryPercent: stats?.memoryPercent ?? '',
@@ -87,6 +90,29 @@ export async function serviceRoutes(app: FastifyInstance): Promise<void> {
       throw new HttpError(500, (err as Error).message);
     }
     return { accessPort: accessPort() };
+  });
+
+  /** Remote access over Tailscale, with the login link while the node waits for someone to sign in. Session only. */
+  app.get<{ Params: { type: string } }>('/api/services/:type/remote', async (req) => {
+    if (req.params.type !== 'postgres') throw notFound('Service');
+    return remoteAccess();
+  });
+
+  /** Turn remote access on (`{enabled: true}`, optionally with `authKey`) or off (`{enabled: false}`). Session only. */
+  app.put<{ Params: { type: string } }>('/api/services/:type/remote', async (req) => {
+    if (req.params.type !== 'postgres') throw notFound('Service');
+    const body = (req.body ?? {}) as { enabled?: unknown; authKey?: unknown };
+    if (typeof body.enabled !== 'boolean') throw badRequest('Send {"enabled": true} or {"enabled": false}.');
+    const authKey = typeof body.authKey === 'string' && body.authKey.trim() ? body.authKey.trim() : null;
+    try {
+      if (!body.enabled) {
+        await disableRemote();
+        return remoteAccess();
+      }
+      return await enableRemote(authKey);
+    } catch (err) {
+      throw new HttpError(500, (err as Error).message);
+    }
   });
 
   /** The superuser sign-in for direct access. Session only, never through an API token. */

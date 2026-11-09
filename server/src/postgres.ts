@@ -71,7 +71,7 @@ function superuserPassword(): string {
  * not publish host ports for a container that is only on internal networks, which local access
  * needs. An early build created it internal; such a network is replaced, keeping its members.
  */
-async function ensureDataNetwork(): Promise<void> {
+export async function ensureDataNetwork(): Promise<void> {
   const inspect = await run(['network', 'inspect', '--format', '{{.Internal}}\t{{range .Containers}}{{.Name}} {{end}}', config.dataNetwork]);
   if (inspect.code === 0) {
     const [internal, members = ''] = inspect.stdout.trim().split('\t');
@@ -260,11 +260,11 @@ export interface SharedDatabaseInfo {
   size: string;
 }
 
-/** The app databases on the server with their sizes, for the health view. */
+/** Every database on the server but the system ones, with sizes; databases restored by hand show up without an app. */
 export async function listDatabases(): Promise<SharedDatabaseInfo[]> {
   const res = await run(
     ['exec', POSTGRES_CONTAINER, 'psql', '-U', SUPERUSER, '-d', 'postgres', '-At', '-F', '\t', '-c',
-      "SELECT datname, pg_size_pretty(pg_database_size(datname)) FROM pg_database WHERE datname LIKE 'app\\_%' ORDER BY datname"],
+      "SELECT datname, pg_size_pretty(pg_database_size(datname)) FROM pg_database WHERE NOT datistemplate AND datname <> 'postgres' ORDER BY datname"],
     { timeoutMs: 15_000 },
   );
   if (res.code !== 0) return [];

@@ -132,6 +132,20 @@ export interface ContainerStats {
   memoryPercent: string
 }
 
+/** Remote access to the shared Postgres server over Tailscale. */
+export interface RemoteAccess {
+  enabled: boolean
+  /** needs-login: waiting for someone to sign in at the login link. needs-approval: signed in, waiting for an admin to approve the device. */
+  state: 'off' | 'starting' | 'needs-login' | 'needs-approval' | 'connected' | 'stopped' | 'error'
+  dnsName: string | null
+  ips: string[]
+  tailnet: string | null
+  keyExpiry: string | null
+  error: string | null
+  /** Only on the session-only remote route. */
+  loginUrl?: string | null
+}
+
 export interface SharedService {
   type: 'postgres'
   label: string
@@ -153,6 +167,7 @@ export interface SharedService {
   accessHost: string
   /** The request came through Cloudflare, which does not carry Postgres traffic to that hostname. */
   viaCloudflare: boolean
+  remote: RemoteAccess
   cpu: string
   memory: string
   memoryPercent: string
@@ -374,6 +389,9 @@ export const api = {
     request<{ ok: true }>('POST', `/api/services/${type}/actions/${action}`),
   setServiceAccess: (type: SharedService['type'], port: number | null) =>
     request<{ accessPort: number | null }>('PUT', `/api/services/${type}/access`, { port }),
+  serviceRemote: (type: SharedService['type']) => request<RemoteAccess>('GET', `/api/services/${type}/remote`),
+  setServiceRemote: (type: SharedService['type'], enabled: boolean, authKey?: string) =>
+    request<RemoteAccess>('PUT', `/api/services/${type}/remote`, { enabled, ...(authKey ? { authKey } : {}) }),
   serviceCredentials: (type: SharedService['type']) =>
     request<{ user: string; password: string; host: string; port: number | null; url: string | null }>('GET', `/api/services/${type}/credentials`),
   serviceLogs: (type: SharedService['type'], tail = 200) =>

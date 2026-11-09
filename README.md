@@ -33,6 +33,9 @@ GitHub Actions ── build & push ──▶ ghcr.io / Docker Hub
 - Managed add-ons: a database on a shared PostgreSQL server, or PostgreSQL, Redis or
   MinIO next to the app, with the connection
   details in its environment.
+- Remote access to the shared Postgres server over Tailscale: one click and a sign-in
+  with your usual identity provider, and pgAdmin or psql on any device in your tailnet
+  can connect, even when the dashboard is behind Cloudflare. No ports are opened.
 - Updates itself from GitHub from the Settings page.
 - Pulls private images from Docker Hub, ghcr.io or any other registry.
 - Access tokens and a `dockyard` command, so scripts and AI agents can deploy.
